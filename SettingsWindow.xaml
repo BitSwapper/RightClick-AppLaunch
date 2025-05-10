@@ -1,4 +1,5 @@
-﻿<Window x:Class="RightClickAppLauncher.SettingsWindow"
+﻿<!-- File: SettingsWindow.xaml -->
+<Window x:Class="RightClickAppLauncher.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -6,21 +7,17 @@
         xmlns:local="clr-namespace:RightClickAppLauncher"
         xmlns:converters="clr-namespace:RightClickAppLauncher.Converters"
         mc:Ignorable="d"
-        Title="Settings - Right Click App Launcher" Height="600" Width="550"
-        WindowStartupLocation="CenterScreen" ShowInTaskbar="False" MinHeight="400" MinWidth="450">
+        Title="Settings - Right Click App Launcher" Height="600" Width="600"
+    WindowStartupLocation="CenterScreen" ShowInTaskbar="False" MinHeight="400" MinWidth="450">
     <Window.Resources>
         <converters:IconPathToImageSourceConverter x:Key="IconPathToImageSourceConverter"/>
     </Window.Resources>
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- Startup -->
             <RowDefinition Height="Auto"/>
-            <!-- Hotkey -->
             <RowDefinition Height="*"/>
-            <!-- Launcher Items -->
             <RowDefinition Height="Auto"/>
-            <!-- Buttons -->
         </Grid.RowDefinitions>
 
         <CheckBox x:Name="LaunchOnStartupCheckBox" Grid.Row="0" Margin="5" Content="Launch application when Windows starts"/>
@@ -32,8 +29,7 @@
                 <CheckBox x:Name="HotkeyAltCheckBox" Content="Alt" Margin="5,2"/>
                 <CheckBox x:Name="HotkeyShiftCheckBox" Content="Shift" Margin="5,2"/>
                 <CheckBox x:Name="HotkeyWinCheckBox" Content="Windows Key" Margin="5,2"/>
-                <TextBlock Text="Note: At least one modifier must be selected. Only the selected modifiers must be pressed along with the Right Mouse Button."
-                           FontStyle="Italic" TextWrapping="Wrap" Foreground="Gray" Margin="5,5,0,0"/>
+                <TextBlock Text="Note: At least one modifier must be selected..." FontStyle="Italic" TextWrapping="Wrap" Foreground="Gray" Margin="5,5,0,0"/>
             </StackPanel>
         </GroupBox>
 
@@ -55,12 +51,16 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
                             <GridViewColumn Header="Display Name" Width="180" DisplayMemberBinding="{Binding DisplayName}"/>
-                            <GridViewColumn Header="Executable Path" Width="220" DisplayMemberBinding="{Binding ExecutablePath}"/>
+                            <GridViewColumn Header="Executable Path" Width="250" DisplayMemberBinding="{Binding ExecutablePath}"/>
+                            <!-- Increased width -->
                         </GridView>
                     </ListView.View>
                 </ListView>
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="5">
-                    <Button Content="Add..." Width="80" Margin="5,0" Click="AddButton_Click"/>
+                    <Button Content="Add Manually..." Width="110" Margin="5,0" Click="AddButton_Click"/>
+                    <!-- Renamed for clarity -->
+                    <Button Content="Auto Add Multiple..." Width="130" Margin="5,0" Click="AutoAddMultipleButton_Click"/>
+                    <!-- NEW BUTTON -->
                     <Button Content="Edit..." Width="80" Margin="5,0" Click="EditButton_Click"/>
                     <Button Content="Remove" Width="80" Margin="5,0" Click="RemoveButton_Click"/>
                     <Button Content="↑" Width="30" Margin="15,0,2,0" Click="MoveUpButton_Click" ToolTip="Move Up"/>
