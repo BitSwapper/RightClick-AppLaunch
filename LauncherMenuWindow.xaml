@@ -7,6 +7,8 @@
         xmlns:local="clr-namespace:RightClickAppLauncher.UI"
         xmlns:converters="clr-namespace:RightClickAppLauncher.Converters"
         xmlns:models="clr-namespace:RightClickAppLauncher.Models"
+        xmlns:properties="clr-namespace:RightClickAppLauncher.Properties"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
         mc:Ignorable="d"
         Title="App Launcher"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
@@ -21,7 +23,9 @@
     <Window.Resources>
         <converters:IconPathToImageSourceConverter x:Key="IconPathToImageSourceConverter"/>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-
+        
+        <sys:Double x:Key="CurrentIconSize">20</sys:Double>
+        
         <Style TargetType="Thumb" x:Key="ResizeGripStyle">
             <Setter Property="Stylus.IsPressAndHoldEnabled" Value="false"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -39,12 +43,12 @@
 
         <ControlTemplate x:Key="IconItemTemplate" TargetType="ContentControl">
             <Border x:Name="IconBorder" Background="#55FFFFFF" BorderBrush="#88FFFFFF" BorderThickness="1" CornerRadius="5" Padding="5"
-                    ToolTip="{Binding DisplayName}"
-                    PreviewMouseLeftButtonDown="Icon_PreviewMouseLeftButtonDown" 
-                    MouseMove="Icon_MouseMove"                             
-                    PreviewMouseLeftButtonUp="Icon_PreviewMouseLeftButtonUp"   
-                    PreviewMouseRightButtonUp="IconBorder_PreviewMouseRightButtonUp"
-                    ContextMenuOpening="IconBorder_ContextMenuOpening">
+    ToolTip="{Binding DisplayName}"
+    PreviewMouseLeftButtonDown="Icon_PreviewMouseLeftButtonDown" 
+    MouseMove="Icon_MouseMove"                             
+    PreviewMouseLeftButtonUp="Icon_PreviewMouseLeftButtonUp"   
+    PreviewMouseRightButtonUp="IconBorder_PreviewMouseRightButtonUp"
+    ContextMenuOpening="IconBorder_ContextMenuOpening">
                 <Border.ContextMenu>
                     <ContextMenu x:Name="IconCtxMenu">
                         <MenuItem Header="Launch" Click="IconContextMenu_Launch_Click"/>
@@ -57,7 +61,9 @@
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Image Source="{Binding IconPath, Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='large'}" 
-                       Width="20" Height="20" Stretch="Uniform"/>
+               Width="{Binding Path=DataContext.CurrentIconSize, RelativeSource={RelativeSource AncestorType=Window}}" 
+               Height="{Binding Path=DataContext.CurrentIconSize, RelativeSource={RelativeSource AncestorType=Window}}" 
+               Stretch="Uniform"/>
             </Border>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">

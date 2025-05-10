@@ -42,6 +42,19 @@ namespace RightClickAppLauncher.UI
             set { _showNoItemsMessage = value; OnPropertyChanged(nameof(ShowNoItemsMessage)); }
         }
 
+        private double _currentIconSize;
+        public double CurrentIconSize
+        {
+            get => _currentIconSize;
+            set
+            {
+                _currentIconSize = value;
+                OnPropertyChanged(nameof(CurrentIconSize));
+            }
+        }
+
+
+
         private Point _mouseDragStartPoint_CanvasRelative;
         private FrameworkElement _draggedItemVisual;
         private LauncherItem _draggedLauncherItemModel;
@@ -88,6 +101,9 @@ namespace RightClickAppLauncher.UI
             LauncherItemsOnCanvas = items ?? new ObservableCollection<LauncherItem>();
             UpdateNoItemsMessage();
 
+            // Initialize the icon size
+            CurrentIconSize = Settings.Default.IconSize;
+
             if(Settings.Default.SavedLayouts == null)
             {
                 Settings.Default.SavedLayouts = new StringCollection();
@@ -112,6 +128,58 @@ namespace RightClickAppLauncher.UI
             EnsureWindowIsOnScreen();
         }
 
+        // Update ApplyIconSize method
+        private void ApplyIconSize()
+        {
+            CurrentIconSize = Settings.Default.IconSize;
+
+            // Force all items to update their bindings
+            if(LauncherItemsOnCanvas != null)
+            {
+                foreach(var item in LauncherItemsOnCanvas)
+                {
+                    item.OnPropertyChanged("IconPath"); // Trigger rebinding
+                }
+            }
+
+            // Force the entire window to update layout
+            this.UpdateLayout();
+            this.InvalidateVisual();
+        }
+
+        // Update the SettingsWindow_Closed method
+        private void SettingsWindow_Closed(object sender, EventArgs e)
+        {
+            _isOpeningSettings = false;
+
+            // Apply the new icon size
+            ApplyIconSize();
+
+            ReloadItemsFromConfig(true);
+
+            if(sender is SettingsWindow sw) sw.Closed -= SettingsWindow_Closed;
+            this.Show();
+            this.Activate();
+            this.Focus();
+        }
+
+        // Remove RefreshIconSizes method since it's now redundant with ApplyIconSize
+
+        // Update Window_Loaded method
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            _iconCanvasInstance = FindVisualChild<Canvas>(LauncherItemsHostControl);
+            if(_iconCanvasInstance == null) Debug.WriteLine("WARNING: IconCanvas instance not found!");
+
+            // Apply icon sizes on load
+            ApplyIconSize();
+
+            this.Focus();
+            this.Activate();
+            if(ShowNoItemsMessage) MenuBorder.Focus();
+        }
+
+
         private Point GetCursorPosition()
         {
             var pos = System.Windows.Forms.Control.MousePosition;
@@ -121,15 +189,6 @@ namespace RightClickAppLauncher.UI
         private void UpdateNoItemsMessage() => ShowNoItemsMessage = !LauncherItemsOnCanvas.Any() || LauncherItemsOnCanvas.All(it => it.ExecutablePath == "NO_ACTION");
         private void ApplyItemPosition(LauncherItem item, double x, double y) { if(item != null) { item.X = x; item.Y = y; } }
         private LauncherItem FindItemById(Guid id) => LauncherItemsOnCanvas.FirstOrDefault(item => item.Id == id);
-
-        private void Window_Loaded(object sender, RoutedEventArgs e)
-        {
-            _iconCanvasInstance = FindVisualChild<Canvas>(LauncherItemsHostControl);
-            if(_iconCanvasInstance == null) Debug.WriteLine("WARNING: IconCanvas instance not found!");
-            this.Focus();
-            this.Activate();
-            if(ShowNoItemsMessage) MenuBorder.Focus();
-        }
 
         public static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
         {
@@ -371,15 +430,21 @@ namespace RightClickAppLauncher.UI
             s.ShowDialog();
         }
 
-        private void SettingsWindow_Closed(object sender, EventArgs e)
+
+        private void RefreshIconSizes()
         {
-            _isOpeningSettings = false;
-            ReloadItemsFromConfig(true);
-            if(sender is SettingsWindow sw) sw.Closed -= SettingsWindow_Closed;
-            this.Show();
-            this.Activate();
-            this.Focus();
+            // Force the ItemsControl to refresh its template bindings
+            if(LauncherItemsHostControl != null)
+            {
+                LauncherItemsHostControl.UpdateLayout();
+                LauncherItemsHostControl.Items.Refresh();
+            }
+
+            // Force layout updates
+            this.UpdateLayout();
+            InvalidateVisual();
         }
+
 
         private void ReloadItemsFromConfig(bool loadDefaultLayout = true, NamedLayout layoutToLoad = null)
         {

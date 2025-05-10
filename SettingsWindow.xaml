@@ -41,11 +41,11 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
                     <TextBlock Text="Icon Size:" VerticalAlignment="Center" Width="100"/>
                     <Slider x:Name="IconSizeSlider" 
-                            Minimum="16" 
-                            Maximum="64" 
+                            Minimum="8" 
+                            Maximum="100" 
                             Value="20" 
                             Width="200" 
-                            TickFrequency="4" 
+                            TickFrequency="1" 
                             IsSnapToTickEnabled="True"
                             TickPlacement="BottomRight"
                             Margin="5,0"/>
@@ -64,7 +64,7 @@
                             Maximum="50" 
                             Value="10" 
                             Width="200" 
-                            TickFrequency="5" 
+                            TickFrequency="1" 
                             IsSnapToTickEnabled="True"
                             TickPlacement="BottomRight"
                             Margin="5,0"/>
