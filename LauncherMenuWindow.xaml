@@ -1,4 +1,5 @@
-﻿<Window x:Class="RightClickAppLauncher.UI.LauncherMenuWindow"
+﻿<!-- File: UI/LauncherMenuWindow.xaml -->
+<Window x:Class="RightClickAppLauncher.UI.LauncherMenuWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -46,18 +47,13 @@
                     ContextMenuOpening="IconBorder_ContextMenuOpening">
                 <Border.ContextMenu>
                     <ContextMenu x:Name="IconCtxMenu">
-                        <MenuItem Header="Launch" 
-                                  Click="IconContextMenu_Launch_Click"/>
-                        <MenuItem Header="Open File Location" 
-                                  Click="IconContextMenu_OpenFileLocation_Click"/>
+                        <MenuItem Header="Launch" Click="IconContextMenu_Launch_Click"/>
+                        <MenuItem Header="Open File Location" Click="IconContextMenu_OpenFileLocation_Click"/>
                         <Separator/>
-                        <MenuItem Header="Edit Launcher Settings..." 
-                                  Click="IconContextMenu_EditSettings_Click"/>
-                        <MenuItem Header="File Properties..." 
-                                  Click="IconContextMenu_FileProperties_Click"/>
+                        <MenuItem Header="Edit Launcher Settings..." Click="IconContextMenu_EditSettings_Click"/>
+                        <MenuItem Header="File Properties..." Click="IconContextMenu_FileProperties_Click"/>
                         <Separator/>
-                        <MenuItem Header="Remove" 
-                                  Click="IconContextMenu_Remove_Click"/>
+                        <MenuItem Header="Remove" Click="IconContextMenu_Remove_Click"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Image Source="{Binding IconPath, Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='large'}" 
@@ -72,7 +68,26 @@
         </ControlTemplate>
     </Window.Resources>
 
-    <Border Name="MenuBorder" Background="#DD2D2D30" BorderBrush="#FF505050" BorderThickness="1" CornerRadius="5" MouseLeftButtonDown="MenuBorder_MouseLeftButtonDown">
+    <Border Name="MenuBorder" Background="#DD2D2D30" BorderBrush="#FF505050" BorderThickness="1" CornerRadius="5" MouseLeftButtonDown="MenuBorder_MouseLeftButtonDown"
+            ContextMenuOpening="Background_ContextMenuOpening">
+        <!-- Event for populating dynamic items -->
+        <Border.ContextMenu>
+            <ContextMenu x:Name="BackgroundContextMenu">
+                <MenuItem Header="Organize Icons">
+                    <MenuItem Header="Align to Grid (Top-Left)" Click="Organize_AlignToGrid_Click"/>
+                    <MenuItem Header="Stack Vertically (Left)" Click="Organize_StackVertically_Click"/>
+                    <MenuItem Header="Stack Horizontally (Top)" Click="Organize_StackHorizontally_Click"/>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="Save Current Layout As..." Click="SaveLayoutAs_Click"/>
+                <MenuItem Header="Load Layout" x:Name="LoadLayoutMenuItemHost"/>
+                <!-- Host for dynamic sub-items -->
+                <MenuItem Header="Manage Saved Layouts..." Click="ManageLayouts_Click"/>
+                <Separator/>
+                <MenuItem Header="Configure All Items..." Click="OptionsButton_Click"/>
+            </ContextMenu>
+        </Border.ContextMenu>
+
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -113,14 +128,7 @@
             <TextBlock Grid.Row="1" Text="Right-click the background or click the options button to configure items."
                        Foreground="#88FFFFFF" FontSize="10" TextWrapping="Wrap" TextAlignment="Center"
                        VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20"
-                       Visibility="{Binding ShowNoItemsMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <TextBlock.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Add New Item..." Click="BackgroundContextMenu_AddItem_Click"/>
-                        <MenuItem Header="Configure All Items..." Click="OptionsButton_Click"/>
-                    </ContextMenu>
-                </TextBlock.ContextMenu>
-            </TextBlock>
+                       Visibility="{Binding ShowNoItemsMessage, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
             <Thumb Grid.Row="0" Grid.RowSpan="3" x:Name="WindowResizeGrip" Cursor="SizeNWSE" Margin="0" HorizontalAlignment="Right" VerticalAlignment="Bottom" Style="{StaticResource ResizeGripStyle}" DragDelta="ResizeDragDelta"/>
         </Grid>

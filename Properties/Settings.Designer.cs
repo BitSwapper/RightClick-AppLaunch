@@ -154,5 +154,16 @@ namespace RightClickAppLauncher.Properties {
                 this["LauncherMenuHeight"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        public global::System.Collections.Specialized.StringCollection SavedLayouts {
+            get {
+                return ((global::System.Collections.Specialized.StringCollection)(this["SavedLayouts"]));
+            }
+            set {
+                this["SavedLayouts"] = value;
+            }
+        }
     }
 }
