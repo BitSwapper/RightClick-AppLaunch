@@ -11,13 +11,12 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True"
         Width="300" Height="250" 
-    MinWidth="150" MinHeight="100"
+        MinWidth="150" MinHeight="100"
         Deactivated="Window_Deactivated"
         Loaded="Window_Loaded"
         Closing="Window_Closing"
-        KeyDown="Window_KeyDown"
+        KeyDown="Window_KeyDown" Focusable="True"
         ResizeMode="CanResizeWithGrip">
-    <!-- Allow resizing -->
     <Window.Resources>
         <converters:IconPathToImageSourceConverter x:Key="IconPathToImageSourceConverter"/>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
@@ -38,15 +37,24 @@
         </Style>
 
         <ControlTemplate x:Key="IconItemTemplate" TargetType="ContentControl">
-            <Grid>
-                <Border x:Name="IconBorder" Background="#55FFFFFF" BorderBrush="#88FFFFFF" BorderThickness="1" CornerRadius="5" Padding="5"
-                        ToolTip="{Binding DisplayName}">
-                    <Image Source="{Binding IconPath, Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='large'}" 
-                           Width="32" Height="32" Stretch="Uniform"/>
-                </Border>
-                <Thumb x:Name="DragThumb" Opacity="0"/>
-                <!-- Invisible thumb for dragging the whole item -->
-            </Grid>
+            <Border x:Name="IconBorder" Background="#55FFFFFF" BorderBrush="#88FFFFFF" BorderThickness="1" CornerRadius="5" Padding="5"
+                    ToolTip="{Binding DisplayName}"
+                    PreviewMouseLeftButtonDown="Icon_PreviewMouseLeftButtonDown" 
+                    MouseMove="Icon_MouseMove"                             
+                    PreviewMouseLeftButtonUp="Icon_PreviewMouseLeftButtonUp"   
+                PreviewMouseRightButtonUp="IconBorder_PreviewMouseRightButtonUp">
+                <Border.ContextMenu>
+                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                        <MenuItem Header="Launch" Click="IconContextMenu_Launch_Click"/>
+                        <MenuItem Header="Open File Location" Click="IconContextMenu_OpenFileLocation_Click"/>
+                        <Separator/>
+                        <MenuItem Header="Properties..." Click="IconContextMenu_Properties_Click"/>
+                        <MenuItem Header="Remove" Click="IconContextMenu_Remove_Click"/>
+                    </ContextMenu>
+                </Border.ContextMenu>
+                <Image Source="{Binding IconPath, Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='large'}" 
+                       Width="20" Height="20" Stretch="Uniform"/>
+            </Border>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter TargetName="IconBorder" Property="Background" Value="#88FFFFFF"/>
@@ -60,14 +68,10 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <!-- Title bar / Options area -->
                 <RowDefinition Height="*"/>
-                <!-- Canvas for icons -->
                 <RowDefinition Height="Auto"/>
-                <!-- Resize grip -->
             </Grid.RowDefinitions>
 
-            <!-- Custom Title Bar Area -->
             <Grid Grid.Row="0" Height="25" Background="#44000000" >
                 <TextBlock Text="{Binding MenuTitle, FallbackValue='App Launcher'}" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="8,0,0,0" Opacity="0.8"/>
                 <Button x:Name="OptionsButton" Style="{StaticResource {x:Static ToolBar.ButtonStyleKey}}"
@@ -76,11 +80,8 @@
                         Click="OptionsButton_Click" ToolTip="Configure Items">
                     <Path Data="M4.5,1.5A2.5,2.5 0 0 1 7,4A2.5,2.5 0 0 1 4.5,6.5A2.5,2.5 0 0 1 2,4A2.5,2.5 0 0 1 4.5,1.5M4.5,2A2,2 0 0 0 2.5,4A2,2 0 0 0 4.5,6A2,2 0 0 0 6.5,4A2,2 0 0 0 4.5,2M4.5,7.5A2.5,2.5 0 0 1 7,10A2.5,2.5 0 0 1 4.5,12.5A2.5,2.5 0 0 1 2,10A2.5,2.5 0 0 1 4.5,7.5M4.5,8A2,2 0 0 0 2.5,10A2,2 0 0 0 4.5,12A2,2 0 0 0 6.5,10A2,2 0 0 0 4.5,8M4.5,13.5A2.5,2.5 0 0 1 7,16A2.5,2.5 0 0 1 4.5,18.5A2.5,2.5 0 0 1 2,16A2.5,2.5 0 0 1 4.5,13.5M4.5,14A2,2 0 0 0 2.5,16A2,2 0 0 0 4.5,18A2,2 0 0 0 6.5,16A2,2 0 0 0 4.5,14Z" 
                           Fill="White" Stretch="Uniform" Opacity="0.7"/>
-                    <!-- You can use a gear icon or an arrow here -->
-                    <!-- Example: <Image Source="/path/to/gear_icon.png"/> -->
                 </Button>
             </Grid>
-
 
             <ItemsControl x:Name="LauncherItemsHostControl" Grid.Row="1" ItemsSource="{Binding LauncherItemsOnCanvas}">
                 <ItemsControl.ItemsPanel>
@@ -96,19 +97,23 @@
                 </ItemsControl.ItemContainerStyle>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type models:LauncherItem}">
-                        <ContentControl Template="{StaticResource IconItemTemplate}"
-                                        PreviewMouseLeftButtonDown="Icon_PreviewMouseLeftButtonDown"
-                                        MouseMove="Icon_MouseMove"
-                                        PreviewMouseLeftButtonUp="Icon_PreviewMouseLeftButtonUp"
-                                        MouseDoubleClick="Icon_MouseDoubleClick"/>
+                        <!-- ContentControl uses the template, mouse events are now on the Border INSIDE the template -->
+                        <ContentControl Template="{StaticResource IconItemTemplate}"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Grid.Row="1" Text="Right-click here or click the options button to configure items."
+            <TextBlock Grid.Row="1" Text="Right-click the background or click the options button to configure items."
                        Foreground="#88FFFFFF" FontSize="10" TextWrapping="Wrap" TextAlignment="Center"
                        VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20"
-                       Visibility="{Binding ShowNoItemsMessage, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                       Visibility="{Binding ShowNoItemsMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Add New Item..." Click="BackgroundContextMenu_AddItem_Click"/>
+                        <MenuItem Header="Configure All Items..." Click="OptionsButton_Click"/>
+                    </ContextMenu>
+                </TextBlock.ContextMenu>
+            </TextBlock>
 
             <Thumb Grid.Row="0" Grid.RowSpan="3" x:Name="WindowResizeGrip" Cursor="SizeNWSE" Margin="0" HorizontalAlignment="Right" VerticalAlignment="Bottom" Style="{StaticResource ResizeGripStyle}" DragDelta="ResizeDragDelta"/>
         </Grid>
