@@ -1,0 +1,162 @@
+﻿// File: Managers/TaskbarMonitor.cs
+using RightClickAppLauncher.Models;
+using RightClickAppLauncher.Native;
+using RightClickAppLauncher.Properties;
+using RightClickAppLauncher.UI;
+using System;
+using System.Collections.ObjectModel; // For ObservableCollection
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq; // For .Any()
+using System.Threading;
+using System.Windows;
+using System.Windows.Input;
+using Application = System.Windows.Application;
+
+namespace RightClickAppLauncher.Managers
+{
+    public class TaskbarMonitor : IDisposable
+    {
+        private readonly WindowsHooks _windowsHooks;
+        private readonly LauncherConfigManager _configManager; // Keep this
+        private LauncherMenuWindow _currentLauncherMenu;
+
+        private bool _reqCtrl, _reqAlt, _reqShift, _reqWin;
+        private bool _isDisposed = false;
+        private long _isProcessingClick = 0;
+
+        public TaskbarMonitor(LauncherConfigManager configManager) // Constructor is fine
+        {
+            _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
+            _windowsHooks = new WindowsHooks();
+            _windowsHooks.RightMouseClick += OnRightMouseClick;
+            LoadHotkeySettings();
+        }
+
+        // ... (StartMonitoring, StopMonitoring, ReloadHotkeySettings, LoadHotkeySettings, OnRightMouseClick, CheckHotkeyModifiers remain the same) ...
+        public void StartMonitoring()
+        {
+            if(_isDisposed) throw new ObjectDisposedException(nameof(TaskbarMonitor));
+            _windowsHooks.InstallMouseHook();
+            Debug.WriteLine("TaskbarMonitor started monitoring.");
+        }
+
+        public void StopMonitoring()
+        {
+            if(_isDisposed) return;
+            _windowsHooks.UninstallMouseHook();
+            CloseCurrentLauncherMenu();
+            Debug.WriteLine("TaskbarMonitor stopped monitoring.");
+        }
+
+        public void ReloadHotkeySettings()
+        {
+            LoadHotkeySettings();
+        }
+
+        private void LoadHotkeySettings()
+        {
+            _reqCtrl = Settings.Default.Hotkey_Ctrl;
+            _reqAlt = Settings.Default.Hotkey_Alt;
+            _reqShift = Settings.Default.Hotkey_Shift;
+            _reqWin = Settings.Default.Hotkey_Win;
+        }
+
+        private void OnRightMouseClick(object sender, MouseHookEventArgs e)
+        {
+            if(_isDisposed) return;
+            if(!CheckHotkeyModifiers()) return;
+            if(Interlocked.CompareExchange(ref _isProcessingClick, 1, 0) != 0) return;
+
+            try
+            {
+                System.Windows.Point clickPoint = new System.Windows.Point(e.X, e.Y);
+                Application.Current.Dispatcher.InvokeAsync(() => ShowLauncherMenu(clickPoint));
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isProcessingClick, 0);
+            }
+        }
+
+        private bool CheckHotkeyModifiers()
+        {
+            bool ctrlPressed = (Keyboard.GetKeyStates(Key.LeftCtrl) & KeyStates.Down) > 0 || (Keyboard.GetKeyStates(Key.RightCtrl) & KeyStates.Down) > 0;
+            bool altPressed = (Keyboard.GetKeyStates(Key.LeftAlt) & KeyStates.Down) > 0 || (Keyboard.GetKeyStates(Key.RightAlt) & KeyStates.Down) > 0;
+            bool shiftPressed = (Keyboard.GetKeyStates(Key.LeftShift) & KeyStates.Down) > 0 || (Keyboard.GetKeyStates(Key.RightShift) & KeyStates.Down) > 0;
+            bool winPressed = (Keyboard.GetKeyStates(Key.LWin) & KeyStates.Down) > 0 || (Keyboard.GetKeyStates(Key.RWin) & KeyStates.Down) > 0;
+
+            bool hotkeyMatch = (ctrlPressed == _reqCtrl) &&
+                               (altPressed == _reqAlt) &&
+                               (shiftPressed == _reqShift) &&
+                               (winPressed == _reqWin);
+
+            bool anyModifierRequired = _reqCtrl || _reqAlt || _reqShift || _reqWin;
+            return hotkeyMatch && anyModifierRequired;
+        }
+
+
+        private void ShowLauncherMenu(System.Windows.Point position)
+        {
+            CloseCurrentLauncherMenu();
+
+            // Load items into an ObservableCollection
+            var itemsList = _configManager.LoadLauncherItems();
+            var observableItems = new ObservableCollection<LauncherItem>(itemsList);
+
+            if(!observableItems.Any() || observableItems.All(it => it.ExecutablePath == "NO_ACTION"))
+            {
+                Debug.WriteLine("No launcher items configured or only placeholder exists.");
+                // LauncherMenuWindow will show its own placeholder text based on this
+            }
+
+            // Pass the configManager to the window so it can save changes
+            _currentLauncherMenu = new LauncherMenuWindow(observableItems, position, _configManager);
+            _currentLauncherMenu.Closed += (s, ev) =>
+            {
+                _currentLauncherMenu = null;
+                // Optional: Trigger a reload of config if settings window wasn't used
+                // but items were reordered and saved directly by LauncherMenuWindow
+            };
+            _currentLauncherMenu.Show();
+        }
+
+        private void CloseCurrentLauncherMenu()
+        {
+            if(_currentLauncherMenu != null)
+            {
+                try
+                {
+                    _currentLauncherMenu.Close(); // This will trigger its Closing event for saving
+                }
+                catch(Exception ex)
+                {
+                    Debug.WriteLine($"Error closing launcher menu: {ex.Message}");
+                }
+                _currentLauncherMenu = null;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if(!_isDisposed)
+            {
+                if(disposing)
+                {
+                    StopMonitoring();
+                    if(_windowsHooks != null)
+                    {
+                        _windowsHooks.RightMouseClick -= OnRightMouseClick;
+                    }
+                }
+                _isDisposed = true;
+            }
+        }
+    }
+}
