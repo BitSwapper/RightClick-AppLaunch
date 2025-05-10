@@ -42,14 +42,21 @@
                     PreviewMouseLeftButtonDown="Icon_PreviewMouseLeftButtonDown" 
                     MouseMove="Icon_MouseMove"                             
                     PreviewMouseLeftButtonUp="Icon_PreviewMouseLeftButtonUp"   
-                PreviewMouseRightButtonUp="IconBorder_PreviewMouseRightButtonUp">
+                    PreviewMouseRightButtonUp="IconBorder_PreviewMouseRightButtonUp"
+                    ContextMenuOpening="IconBorder_ContextMenuOpening">
+                <!-- ADD THIS EVENT -->
                 <Border.ContextMenu>
-                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                        <MenuItem Header="Launch" Click="IconContextMenu_Launch_Click"/>
-                        <MenuItem Header="Open File Location" Click="IconContextMenu_OpenFileLocation_Click"/>
-                        <Separator/>
-                        <MenuItem Header="Properties..." Click="IconContextMenu_Properties_Click"/>
-                        <MenuItem Header="Remove" Click="IconContextMenu_Remove_Click"/>
+                    <!-- REMOVE DataContext binding from here. We'll set it in code-behind. -->
+                    <ContextMenu x:Name="IconCtxMenu">
+                        <MenuItem Header="Launch" 
+                                  Click="IconContextMenu_Launch_Click"/>
+                        <!-- CommandParameter will be set in code if needed, or retrieved from ContextMenu's Tag/DataContext -->
+                        <MenuItem Header="Open File Location" 
+                                  Click="IconContextMenu_OpenFileLocation_Click"/>
+                        <MenuItem Header="Properties..." 
+                                  Click="IconContextMenu_Properties_Click"/>
+                        <MenuItem Header="Remove" 
+                                  Click="IconContextMenu_Remove_Click"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Image Source="{Binding IconPath, Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='large'}" 
@@ -97,7 +104,6 @@
                 </ItemsControl.ItemContainerStyle>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type models:LauncherItem}">
-                        <!-- ContentControl uses the template, mouse events are now on the Border INSIDE the template -->
                         <ContentControl Template="{StaticResource IconItemTemplate}"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
