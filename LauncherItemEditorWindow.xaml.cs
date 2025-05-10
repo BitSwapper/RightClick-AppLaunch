@@ -30,6 +30,7 @@ namespace RightClickAppLauncher.UI
         public LauncherItemEditorWindow(LauncherItem itemToEdit)
         {
             InitializeComponent();
+            // Clone all properties including X and Y position
             Item = new LauncherItem
             {
                 Id = itemToEdit.Id,
@@ -37,7 +38,9 @@ namespace RightClickAppLauncher.UI
                 ExecutablePath = itemToEdit.ExecutablePath,
                 Arguments = itemToEdit.Arguments,
                 IconPath = itemToEdit.IconPath,
-                WorkingDirectory = itemToEdit.WorkingDirectory
+                WorkingDirectory = itemToEdit.WorkingDirectory,
+                X = itemToEdit.X,  // Preserve X position
+                Y = itemToEdit.Y   // Preserve Y position
             };
             DataContext = this;
         }
@@ -64,12 +67,17 @@ namespace RightClickAppLauncher.UI
             }
         }
 
+        // FIXED: Now accepts all image types
         private void BrowseIcon_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog // Using Microsoft.Win32.OpenFileDialog
             {
-                Filter = "Icon Files (*.ico;*.exe;*.dll)|*.ico;*.exe;*.dll|Image Files (*.png;*.jpg)|*.png;*.jpg|All Files (*.*)|*.*",
-                Title = "Select Icon File"
+                Filter = "All Supported Images|*.ico;*.exe;*.dll;*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.tiff;*.tif|" +
+                         "Icon Files (*.ico)|*.ico|" +
+                         "Executable Files (*.exe;*.dll)|*.exe;*.dll|" +
+                         "Image Files (*.png;*.jpg;*.jpeg;*.gif;*.bmp)|*.png;*.jpg;*.jpeg;*.gif;*.bmp|" +
+                         "All Files (*.*)|*.*",
+                Title = "Select Icon File or Image"
             };
             if(openFileDialog.ShowDialog() == true)
             {
@@ -78,7 +86,6 @@ namespace RightClickAppLauncher.UI
             }
         }
 
-        // MODIFIED METHOD
         private void BrowseWorkingDirectory_Click(object sender, RoutedEventArgs e)
         {
             using(FolderBrowserDialog dialog = new FolderBrowserDialog()) // Using System.Windows.Forms.FolderBrowserDialog

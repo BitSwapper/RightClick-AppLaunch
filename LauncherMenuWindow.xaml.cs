@@ -721,29 +721,21 @@ namespace RightClickAppLauncher.UI
             {
                 _isOpeningSettings = true;
 
-                // Clone the item to preserve original position data
-                var editItem = new LauncherItem
-                {
-                    Id = i.Id,
-                    DisplayName = i.DisplayName,
-                    ExecutablePath = i.ExecutablePath,
-                    IconPath = i.IconPath,
-                    Arguments = i.Arguments,
-                    WorkingDirectory = i.WorkingDirectory,
-                    X = i.X,  // Preserve position
-                    Y = i.Y   // Preserve position
-                };
-
-                var ed = new LauncherItemEditorWindow(editItem) { Owner = this };
+                // Use the existing LauncherItemEditorWindow which now properly preserves position
+                var ed = new LauncherItemEditorWindow(i) { Owner = this };
                 if(ed.ShowDialog() == true)
                 {
                     var oI = LauncherItemsOnCanvas.FirstOrDefault(x => x.Id == i.Id);
                     int idx = oI != null ? LauncherItemsOnCanvas.IndexOf(oI) : -1;
                     if(idx != -1)
                     {
-                        // Preserve the original position when updating
-                        ed.Item.X = oI.X;
-                        ed.Item.Y = oI.Y;
+                        // The editor now preserves position internally, but let's be extra safe
+                        if(ed.Item.X == 0 && ed.Item.Y == 0 && (oI.X != 0 || oI.Y != 0))
+                        {
+                            // If position was reset to 0,0 (which shouldn't happen now), restore original
+                            ed.Item.X = oI.X;
+                            ed.Item.Y = oI.Y;
+                        }
                         LauncherItemsOnCanvas[idx] = ed.Item;
                         SaveCurrentLayoutAsDefault();
                         Debug.WriteLine($"EditSettings updated: {ed.Item.DisplayName} at position ({ed.Item.X}, {ed.Item.Y})");
