@@ -84,7 +84,7 @@
                 <!-- Host for dynamic sub-items -->
                 <MenuItem Header="Manage Saved Layouts..." Click="ManageLayouts_Click"/>
                 <Separator/>
-                <MenuItem Header="Configure All Items..." Click="OptionsButton_Click"/>
+                <MenuItem Header="Settings / Import..." Click="OptionsButton_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
 
@@ -95,16 +95,7 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Height="25" Background="#44000000" >
-                <TextBlock Text="{Binding MenuTitle, FallbackValue='App Launcher'}" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="8,0,0,0" Opacity="0.8"/>
-                <Button x:Name="OptionsButton" Style="{StaticResource {x:Static ToolBar.ButtonStyleKey}}"
-                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,5,0"
-                        Width="20" Height="20" Padding="2"
-                        Click="OptionsButton_Click" ToolTip="Configure Items">
-                    <Path Data="M4.5,1.5A2.5,2.5 0 0 1 7,4A2.5,2.5 0 0 1 4.5,6.5A2.5,2.5 0 0 1 2,4A2.5,2.5 0 0 1 4.5,1.5M4.5,2A2,2 0 0 0 2.5,4A2,2 0 0 0 4.5,6A2,2 0 0 0 6.5,4A2,2 0 0 0 4.5,2M4.5,7.5A2.5,2.5 0 0 1 7,10A2.5,2.5 0 0 1 4.5,12.5A2.5,2.5 0 0 1 2,10A2.5,2.5 0 0 1 4.5,7.5M4.5,8A2,2 0 0 0 2.5,10A2,2 0 0 0 4.5,12A2,2 0 0 0 6.5,10A2,2 0 0 0 4.5,8M4.5,13.5A2.5,2.5 0 0 1 7,16A2.5,2.5 0 0 1 4.5,18.5A2.5,2.5 0 0 1 2,16A2.5,2.5 0 0 1 4.5,13.5M4.5,14A2,2 0 0 0 2.5,16A2,2 0 0 0 4.5,18A2,2 0 0 0 6.5,16A2,2 0 0 0 4.5,14Z" 
-                          Fill="White" Stretch="Uniform" Opacity="0.7"/>
-                </Button>
-            </Grid>
+
 
             <ItemsControl x:Name="LauncherItemsHostControl" Grid.Row="1" ItemsSource="{Binding LauncherItemsOnCanvas}">
                 <ItemsControl.ItemsPanel>

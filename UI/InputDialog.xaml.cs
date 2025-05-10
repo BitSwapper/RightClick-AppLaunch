@@ -38,19 +38,16 @@ namespace RightClickAppLauncher.UI
         {
             ResponseTextBox.KeyDown += (s, args) =>
             {
-                if (args.Key == Key.Enter)
+                if(args.Key == Key.Enter)
                 {
-                    // Check if default button is available and simulate its click
-                    //if (IsDefault && OkButton_Click != null) // OkButton_Click is just a method name here
-                    //{
-                    //     OkButton_Click(sender, new RoutedEventArgs(Button.ClickEvent, this));
-                    //}
-                    System.Windows.Forms.MessageBox.Show("WTF");
+                    // Set the dialog result and close
+                    DialogResult = true;
+                    Close();
                     args.Handled = true;
                 }
             };
         }
-        
+
         // Handle Escape key at window level to close as Cancel
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {

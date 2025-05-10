@@ -218,8 +218,42 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
     private void IconContextMenu_OpenFileLocation_Click(object sender, RoutedEventArgs e) { Debug.WriteLine("CtxMenuOpenLocation"); var item = GetLauncherItemFromContextMenu(sender); if(item != null && !string.IsNullOrWhiteSpace(item.ExecutablePath)) { try { string p = Environment.ExpandEnvironmentVariables(item.ExecutablePath); if(File.Exists(p)) Process.Start("explorer.exe", $"/select,\"{p}\""); else if(Directory.Exists(p)) Process.Start("explorer.exe", $"\"{p}\""); else { string d = Path.GetDirectoryName(p); if(Directory.Exists(d)) Process.Start("explorer.exe", $"\"{d}\""); else MessageBox.Show("Cannot find location.", "Error"); } } catch(Exception ex) { MessageBox.Show($"Err: {ex.Message}", "Error"); } } else Debug.WriteLine("OpenLocationClick: Null item/path"); }
     private void IconContextMenu_EditSettings_Click(object sender, RoutedEventArgs e) { Debug.WriteLine("CtxMenuEditSettings"); var i = GetLauncherItemFromContextMenu(sender); if(i != null) { _isOpeningSettings = true; var ed = new LauncherItemEditorWindow(i) { Owner = this }; if(ed.ShowDialog() == true) { var oI = LauncherItemsOnCanvas.FirstOrDefault(x => x.Id == i.Id); int idx = oI != null ? LauncherItemsOnCanvas.IndexOf(oI) : -1; if(idx != -1) { LauncherItemsOnCanvas[idx] = ed.Item; SaveCurrentLayoutAsDefault(); Debug.WriteLine($"EditSettings updated: {ed.Item.DisplayName}"); } else Debug.WriteLine($"EditSettings: Cannot find original {i.DisplayName}"); } _isOpeningSettings = false; Focus(); } else Debug.WriteLine("EditSettingsClick: Null item"); }
     private void IconContextMenu_FileProperties_Click(object sender, RoutedEventArgs e) { Debug.WriteLine("CtxMenuFileProps"); var i = GetLauncherItemFromContextMenu(sender); if(i != null && !string.IsNullOrWhiteSpace(i.ExecutablePath)) { string fp = Environment.ExpandEnvironmentVariables(i.ExecutablePath); if(File.Exists(fp) || Directory.Exists(fp)) { try { SHELLEXECUTEINFO sei = new SHELLEXECUTEINFO { cbSize = Marshal.SizeOf(typeof(SHELLEXECUTEINFO)), fMask = SEE_MASK_INVOKEIDLIST, hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle, lpVerb = "properties", lpFile = fp, nShow = SW_SHOWNORMAL }; if(!ShellExecuteEx(ref sei)) { int err = Marshal.GetLastWin32Error(); MessageBox.Show($"Cannot show file props. Err: {err}", "Error"); Debug.WriteLine($"ShellEx Err: {err} for {fp}"); } else Debug.WriteLine($"Showing props for {fp}"); } catch(Exception ex) { MessageBox.Show($"Err showing file props: {ex.Message}", "Error"); Debug.WriteLine($"Ex showing props: {ex}"); } } else MessageBox.Show($"Not found: {fp}", "Error"); } else Debug.WriteLine("FilePropsClick: Null item/path"); }
-    private void IconContextMenu_Remove_Click(object sender, RoutedEventArgs e) { Debug.WriteLine("CtxMenuRemove"); var i = GetLauncherItemFromContextMenu(sender); if(i != null) { if(MessageBox.Show($"Remove '{i.DisplayName}'?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes) { LauncherItemsOnCanvas.Remove(i); UpdateNoItemsMessage(); _dragHistory.ClearHistory(); SaveCurrentLayoutAsDefault(); Debug.WriteLine($"Removed: {i.DisplayName}"); } } else Debug.WriteLine("RemoveClick: Null item"); }
+    private void IconContextMenu_Remove_Click(object sender, RoutedEventArgs e)
+    {
+        Debug.WriteLine("CtxMenuRemove");
 
+        // Set flag to prevent window from closing
+        _isShowingInputDialog = true;
+
+        var i = GetLauncherItemFromContextMenu(sender);
+        if(i != null)
+        {
+            var result = MessageBox.Show($"Remove '{i.DisplayName}'?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if(result == MessageBoxResult.Yes)
+            {
+                LauncherItemsOnCanvas.Remove(i);
+                UpdateNoItemsMessage();
+                _dragHistory.ClearHistory();
+                SaveCurrentLayoutAsDefault();
+                Debug.WriteLine($"Removed: {i.DisplayName}");
+
+                // Force the UI to refresh if needed
+                if(LauncherItemsHostControl != null)
+                {
+                    LauncherItemsHostControl.Items.Refresh();
+                }
+            }
+        }
+        else
+        {
+            Debug.WriteLine("RemoveClick: Null item");
+        }
+
+        // Reset flag and ensure window stays active
+        _isShowingInputDialog = false;
+        this.Activate();
+        this.Focus();
+    }
 
     private List<NamedLayout> GetSavedNamedLayouts()
     {
@@ -362,40 +396,47 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
 
     private void ManageLayouts_Click(object sender, RoutedEventArgs e)
     {
-        _isShowingInputDialog = true; // Add this line
+        _isShowingInputDialog = true; // Using the same flag for protection
 
         List<NamedLayout> savedLayouts = GetSavedNamedLayouts();
         if(!savedLayouts.Any())
         {
             MessageBox.Show("No layouts have been saved yet.", "Manage Layouts", MessageBoxButton.OK, MessageBoxImage.Information);
-            _isShowingInputDialog = false; // Reset flag
+            _isShowingInputDialog = false;
             return;
         }
 
-        bool changed = false;
-        for(int i = savedLayouts.Count - 1; i >= 0; i--)
+        var manageWindow = new ManageLayoutsWindow(savedLayouts) { Owner = this };
+        var result = manageWindow.ShowDialog();
+
+        if(result == true)
         {
-            var layout = savedLayouts[i];
-            var result = MessageBox.Show($"Saved Layout: \"{layout.Name}\" (Saved: {layout.SavedDate.ToLocalTime()})\n\nDelete this layout?",
-                                     "Manage Layouts", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-            if(result == MessageBoxResult.Yes)
+            // Either layouts were modified or user wants to load a layout
+            if(manageWindow.LayoutsModified)
             {
-                savedLayouts.RemoveAt(i);
-                changed = true;
+                // Save the updated layouts
+                PersistAllNamedLayouts(manageWindow.GetUpdatedLayouts());
+                MessageBox.Show("Layout changes saved.", "Manage Layouts", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-            else if(result == MessageBoxResult.Cancel)
+
+            // Check if user wanted to load a specific layout
+            if(manageWindow.SelectedLayoutToLoad != null)
             {
-                break;
+                ReloadItemsFromConfig(false, manageWindow.SelectedLayoutToLoad);
+            }
+        }
+        else if(manageWindow.LayoutsModified)
+        {
+            // User closed but made changes
+            var saveResult = MessageBox.Show("Save changes to layouts?", "Save Changes",
+                                       MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if(saveResult == MessageBoxResult.Yes)
+            {
+                PersistAllNamedLayouts(manageWindow.GetUpdatedLayouts());
             }
         }
 
-        if(changed)
-        {
-            PersistAllNamedLayouts(savedLayouts);
-            MessageBox.Show("Layout changes applied.", "Manage Layouts", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        _isShowingInputDialog = false; // Reset flag
+        _isShowingInputDialog = false;
     }
 
     private void BackgroundContextMenu_AddItem_Click(object sender, RoutedEventArgs e) => OpenSettingsWindow();
