@@ -1,23 +1,22 @@
-﻿using RightClickAppLauncher.Managers;
-using RightClickAppLauncher.Models;
-using RightClickAppLauncher.Utils;
-using System;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
+// File: UI/LauncherMenuWindow.xaml.cs
+using System.Runtime.InteropServices; // For ShellExecuteEx
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using RightClickAppLauncher.Managers;
+using RightClickAppLauncher.Models;
+using RightClickAppLauncher.Utils;
 using Cursors = System.Windows.Input.Cursors;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MessageBox = System.Windows.MessageBox;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Point = System.Windows.Point;
-
 
 namespace RightClickAppLauncher.UI
 {
@@ -59,56 +58,48 @@ namespace RightClickAppLauncher.UI
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct SHELLEXECUTEINFO
+        { /* ... same as before ... */
+            public int cbSize; public uint fMask; public IntPtr hwnd;
+            [MarshalAs(UnmanagedType.LPTStr)] public string lpVerb;
+            [MarshalAs(UnmanagedType.LPTStr)] public string lpFile;
+            [MarshalAs(UnmanagedType.LPTStr)] public string lpParameters;
+            [MarshalAs(UnmanagedType.LPTStr)] public string lpDirectory;
+            public int nShow; public IntPtr hInstApp; public IntPtr lpIDList;
+            [MarshalAs(UnmanagedType.LPTStr)] public string lpClass;
+            public IntPtr hkeyClass; public uint dwHotKey; public IntPtr hIcon; public IntPtr hProcess;
+        }
+        private const uint SEE_MASK_INVOKEIDLIST = 12;
+        private const int SW_SHOWNORMAL = 1;
+        [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
+
         public LauncherMenuWindow(ObservableCollection<LauncherItem> items, Point position, LauncherConfigManager configManager)
         {
             InitializeComponent();
-            DataContext = this; // Window's DataContext
+            DataContext = this;
             _configManager = configManager;
             _dragHistory = new DragHistoryManager(ApplyItemPosition);
-
             LauncherItemsOnCanvas = items ?? new ObservableCollection<LauncherItem>();
             UpdateNoItemsMessage();
-
             this.Left = Properties.Settings.Default.LauncherMenuX != 0 ? Properties.Settings.Default.LauncherMenuX : position.X;
             this.Top = Properties.Settings.Default.LauncherMenuY != 0 ? Properties.Settings.Default.LauncherMenuY : position.Y;
             this.Width = Properties.Settings.Default.LauncherMenuWidth > 0 ? Properties.Settings.Default.LauncherMenuWidth : this.Width;
             this.Height = Properties.Settings.Default.LauncherMenuHeight > 0 ? Properties.Settings.Default.LauncherMenuHeight : this.Height;
-
             EnsureWindowIsOnScreen();
         }
 
-        private void UpdateNoItemsMessage()
-        {
-            ShowNoItemsMessage = !LauncherItemsOnCanvas.Any() || LauncherItemsOnCanvas.All(it => it.ExecutablePath == "NO_ACTION");
-        }
-
-        private void ApplyItemPosition(LauncherItem item, double x, double y)
-        {
-            if(item != null)
-            {
-                item.X = x;
-                item.Y = y;
-            }
-        }
-
-        private LauncherItem FindItemById(Guid id)
-        {
-            return LauncherItemsOnCanvas.FirstOrDefault(item => item.Id == id);
-        }
+        private void UpdateNoItemsMessage() => ShowNoItemsMessage = !LauncherItemsOnCanvas.Any() || LauncherItemsOnCanvas.All(it => it.ExecutablePath == "NO_ACTION");
+        private void ApplyItemPosition(LauncherItem item, double x, double y) { if(item != null) { item.X = x; item.Y = y; } }
+        private LauncherItem FindItemById(Guid id) => LauncherItemsOnCanvas.FirstOrDefault(item => item.Id == id);
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             _iconCanvasInstance = FindVisualChild<Canvas>(LauncherItemsHostControl);
-            if(_iconCanvasInstance == null)
-            {
-                Debug.WriteLine("WARNING: IconCanvas instance not found in Window_Loaded!");
-            }
-            this.Focus();
-            this.Activate();
-            if(ShowNoItemsMessage)
-            {
-                MenuBorder.Focus();
-            }
+            if(_iconCanvasInstance == null) Debug.WriteLine("WARNING: IconCanvas instance not found!");
+            this.Focus(); this.Activate();
+            if(ShowNoItemsMessage) MenuBorder.Focus();
         }
 
         public static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
@@ -117,50 +108,43 @@ namespace RightClickAppLauncher.UI
             for(int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
             {
                 DependencyObject child = VisualTreeHelper.GetChild(parent, i);
-                if(child != null && child is T)
-                    return (T)child;
-                else
-                {
-                    T childOfChild = FindVisualChild<T>(child);
-                    if(childOfChild != null)
-                        return childOfChild;
-                }
+                if(child is T tChild) return tChild;
+                T childOfChild = FindVisualChild<T>(child);
+                if(childOfChild != null) return childOfChild;
             }
             return null;
         }
 
         private void EnsureWindowIsOnScreen()
         {
-            double screenWidth = SystemParameters.VirtualScreenWidth;
-            double screenHeight = SystemParameters.VirtualScreenHeight;
-            if(this.Left + this.Width > screenWidth) this.Left = screenWidth - this.Width;
-            if(this.Top + this.Height > screenHeight) this.Top = screenHeight - this.Height;
-            if(this.Left < 0) this.Left = 0;
-            if(this.Top < 0) this.Top = 0;
+            double sW = SystemParameters.VirtualScreenWidth, sH = SystemParameters.VirtualScreenHeight;
+            if(this.Left + this.Width > sW) this.Left = sW - this.Width;
+            if(this.Top + this.Height > sH) this.Top = sH - this.Height;
+            if(this.Left < 0) this.Left = 0; if(this.Top < 0) this.Top = 0;
         }
 
         private void Window_Deactivated(object sender, EventArgs e)
         {
-            if(!_isCurrentlyDragging && !_isOpeningSettings)
-            {
-                try { this.Close(); } catch(Exception ex) { Debug.WriteLine($"Error closing on deactivate: {ex.Message}"); }
-            }
+            if(!_isCurrentlyDragging && !_isOpeningSettings) { try { this.Close(); } catch(Exception ex) { Debug.WriteLine($"Err closing on deactivate: {ex.Message}"); } }
         }
 
         private void Window_Closing(object sender, CancelEventArgs e)
         {
+            // Save current visual state IF NOT ALREADY SAVED by OpenSettingsWindow
+            // This primarily catches the case where the window is closed directly (e.g., Escape key)
+            // without going through the settings workflow.
+            // If OpenSettingsWindow was called, it already saved. Re-saving here is fine, it'll just be the same data.
             SaveAllLauncherItemPositions();
-            Properties.Settings.Default.LauncherMenuX = this.Left;
-            Properties.Settings.Default.LauncherMenuY = this.Top;
-            Properties.Settings.Default.LauncherMenuWidth = this.ActualWidth;
-            Properties.Settings.Default.LauncherMenuHeight = this.ActualHeight;
+
+            Properties.Settings.Default.LauncherMenuX = this.Left; Properties.Settings.Default.LauncherMenuY = this.Top;
+            Properties.Settings.Default.LauncherMenuWidth = this.ActualWidth; Properties.Settings.Default.LauncherMenuHeight = this.ActualHeight;
             Properties.Settings.Default.Save();
         }
-
         private void SaveAllLauncherItemPositions()
         {
             if(LauncherItemsOnCanvas != null && _configManager != null)
             {
+                Debug.WriteLine("SaveAllLauncherItemPositions called.");
                 _configManager.SaveLauncherItems(new System.Collections.Generic.List<LauncherItem>(LauncherItemsOnCanvas));
             }
         }
@@ -168,48 +152,19 @@ namespace RightClickAppLauncher.UI
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
             if(e.Key == Key.Escape) { this.Close(); return; }
-            bool ctrlPressed = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
-            if(ctrlPressed && e.Key == Key.Z) { _dragHistory.Undo(FindItemById); e.Handled = true; }
-            else if(ctrlPressed && e.Key == Key.Y) { _dragHistory.Redo(FindItemById); e.Handled = true; }
+            bool ctrl = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+            if(ctrl && e.Key == Key.Z) { _dragHistory.Undo(FindItemById); e.Handled = true; }
+            else if(ctrl && e.Key == Key.Y) { _dragHistory.Redo(FindItemById); e.Handled = true; }
         }
 
         private void LaunchItem(LauncherItem item)
         {
-            Debug.WriteLine($"LaunchItem called for: {item?.DisplayName ?? "NULL ITEM"}");
-            if(item == null || string.IsNullOrWhiteSpace(item.ExecutablePath) || item.ExecutablePath == "NO_ACTION")
-            {
-                if(item?.ExecutablePath != "NO_ACTION")
-                {
-                    MessageBox.Show("Executable path is not configured for this item.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-                return;
-            }
-            try
-            {
-                ProcessStartInfo startInfo = new ProcessStartInfo
-                {
-                    FileName = Environment.ExpandEnvironmentVariables(item.ExecutablePath),
-                    Arguments = Environment.ExpandEnvironmentVariables(item.Arguments ?? string.Empty),
-                    UseShellExecute = true
-                };
-                if(!string.IsNullOrWhiteSpace(item.WorkingDirectory))
-                {
-                    string workingDir = Environment.ExpandEnvironmentVariables(item.WorkingDirectory);
-                    if(Directory.Exists(workingDir)) startInfo.WorkingDirectory = workingDir;
-                    else { string exeDir = Path.GetDirectoryName(startInfo.FileName); if(Directory.Exists(exeDir)) startInfo.WorkingDirectory = exeDir; }
-                }
-                else { string exeDir = Path.GetDirectoryName(startInfo.FileName); if(Directory.Exists(exeDir)) startInfo.WorkingDirectory = exeDir; }
-                Process.Start(startInfo);
-                Debug.WriteLine($"Successfully started: {item.DisplayName}");
-            }
-            catch(Exception ex)
-            {
-                MessageBox.Show($"Failed to launch '{item.DisplayName}':\n{ex.Message}", "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                Debug.WriteLine($"Launch Error for {item.ExecutablePath}: {ex.ToString()}");
-            }
+            Debug.WriteLine($"LaunchItem: {item?.DisplayName ?? "NULL"}");
+            if(item == null || string.IsNullOrWhiteSpace(item.ExecutablePath) || item.ExecutablePath == "NO_ACTION") { if(item?.ExecutablePath != "NO_ACTION") MessageBox.Show("Path not configured.", "Error"); return; }
+            try { var psi = new ProcessStartInfo { FileName = Environment.ExpandEnvironmentVariables(item.ExecutablePath), Arguments = Environment.ExpandEnvironmentVariables(item.Arguments ?? ""), UseShellExecute = true }; if(!string.IsNullOrWhiteSpace(item.WorkingDirectory)) { string wd = Environment.ExpandEnvironmentVariables(item.WorkingDirectory); if(Directory.Exists(wd)) psi.WorkingDirectory = wd; else { string ed = Path.GetDirectoryName(psi.FileName); if(Directory.Exists(ed)) psi.WorkingDirectory = ed; } } else { string ed = Path.GetDirectoryName(psi.FileName); if(Directory.Exists(ed)) psi.WorkingDirectory = ed; } Process.Start(psi); Debug.WriteLine($"Started: {item.DisplayName}"); }
+            catch(Exception ex) { MessageBox.Show($"Launch failed for '{item.DisplayName}': {ex.Message}", "Error"); Debug.WriteLine($"Launch Err: {ex}"); }
         }
 
-        // --- Icon Dragging Logic & Single Click ---
         private void Icon_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             Debug.WriteLine("Icon_PreviewMouseLeftButtonDown");
@@ -217,16 +172,11 @@ namespace RightClickAppLauncher.UI
             {
                 _draggedItemVisual = fe;
                 _draggedLauncherItemModel = launcherItem;
-
-                if(_iconCanvasInstance == null)
-                {
-                    _iconCanvasInstance = FindVisualChild<Canvas>(LauncherItemsHostControl);
-                    if(_iconCanvasInstance == null) { Debug.WriteLine("CRITICAL: IconCanvas still not found in MouseDown!"); return; }
-                }
+                if(_iconCanvasInstance == null) { _iconCanvasInstance = FindVisualChild<Canvas>(LauncherItemsHostControl); if(_iconCanvasInstance == null) { Debug.WriteLine("CRITICAL: IconCanvas not found!"); return; } }
                 _mouseDragStartPoint_CanvasRelative = e.GetPosition(_iconCanvasInstance);
                 _originalItemPositionBeforeDrag = new Point(_draggedLauncherItemModel.X, _draggedLauncherItemModel.Y);
-
                 _leftMouseDownOnIcon = true;
+                e.Handled = true;
             }
         }
 
@@ -241,33 +191,26 @@ namespace RightClickAppLauncher.UI
                     if(Math.Abs(currentPositionOnCanvas.X - _mouseDragStartPoint_CanvasRelative.X) > SystemParameters.MinimumHorizontalDragDistance ||
                         Math.Abs(currentPositionOnCanvas.Y - _mouseDragStartPoint_CanvasRelative.Y) > SystemParameters.MinimumVerticalDragDistance)
                     {
-                        Debug.WriteLine("Starting drag");
+                        Debug.WriteLine("Starting icon drag");
                         _isCurrentlyDragging = true;
                         _draggedItemVisual?.CaptureMouse();
                         if(_draggedItemVisual != null) _draggedItemVisual.Cursor = Cursors.Hand;
                     }
                 }
-
                 if(_isCurrentlyDragging)
                 {
                     if(_iconCanvasInstance == null || _draggedLauncherItemModel == null || _draggedItemVisual == null) return;
-
                     Point currentMousePositionOnCanvas = e.GetPosition(_iconCanvasInstance);
                     double offsetX = currentMousePositionOnCanvas.X - _mouseDragStartPoint_CanvasRelative.X;
                     double offsetY = currentMousePositionOnCanvas.Y - _mouseDragStartPoint_CanvasRelative.Y;
-
                     double newX = _originalItemPositionBeforeDrag.X + offsetX;
                     double newY = _originalItemPositionBeforeDrag.Y + offsetY;
-
                     double itemWidth = _draggedItemVisual.ActualWidth;
                     double itemHeight = _draggedItemVisual.ActualHeight;
-
-                    if(double.IsNaN(itemWidth) || itemWidth <= 0) itemWidth = 20 + 10; // Icon 20 + 5*2 padding
-                    if(double.IsNaN(itemHeight) || itemHeight <= 0) itemHeight = 20 + 10;
-
+                    if(double.IsNaN(itemWidth) || itemWidth <= 0) itemWidth = 30;
+                    if(double.IsNaN(itemHeight) || itemHeight <= 0) itemHeight = 30;
                     newX = Math.Max(0, Math.Min(newX, _iconCanvasInstance.ActualWidth - itemWidth));
                     newY = Math.Max(0, Math.Min(newY, _iconCanvasInstance.ActualHeight - itemHeight));
-
                     _draggedLauncherItemModel.X = newX;
                     _draggedLauncherItemModel.Y = newY;
                 }
@@ -276,15 +219,12 @@ namespace RightClickAppLauncher.UI
 
         private void Icon_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            Debug.WriteLine($"Icon_PreviewMouseLeftButtonUp. _isCurrentlyDragging: {_isCurrentlyDragging}, _leftMouseDownOnIcon: {_leftMouseDownOnIcon}");
-
+            Debug.WriteLine($"IconUp. Dragging: {_isCurrentlyDragging}, MouseDownOnIcon: {_leftMouseDownOnIcon}");
             bool wasDragging = _isCurrentlyDragging;
             LauncherItem itemModelForClick = null;
-
             if(_leftMouseDownOnIcon && sender is FrameworkElement fe)
             {
                 itemModelForClick = fe.DataContext as LauncherItem;
-
                 if(_isCurrentlyDragging)
                 {
                     if(_draggedLauncherItemModel != null && _draggedItemVisual != null)
@@ -300,230 +240,116 @@ namespace RightClickAppLauncher.UI
                     if(_draggedItemVisual != null) _draggedItemVisual.Cursor = null;
                 }
             }
-
             _isCurrentlyDragging = false;
             bool wasLeftMouseDownOnIcon = _leftMouseDownOnIcon;
             _leftMouseDownOnIcon = false;
             _draggedItemVisual = null;
             _draggedLauncherItemModel = null;
-
             if(wasLeftMouseDownOnIcon && !wasDragging && itemModelForClick != null)
             {
-                Debug.WriteLine($"Attempting single click launch for: {itemModelForClick.DisplayName}");
+                Debug.WriteLine($"Single click launch: {itemModelForClick.DisplayName}");
                 LaunchItem(itemModelForClick);
                 this.Close();
             }
         }
 
-        // --- Options and Settings Logic ---
-        private void OptionsButton_Click(object sender, RoutedEventArgs e) { OpenSettingsWindow(); }
+        private void OptionsButton_Click(object sender, RoutedEventArgs e) => OpenSettingsWindow();
+
         private void OpenSettingsWindow()
         {
             _isOpeningSettings = true;
+
+            // ***** SAVE CURRENT POSITIONS BEFORE OPENING SETTINGS *****
+            SaveAllLauncherItemPositions();
+            Debug.WriteLine("Saved icon positions before opening settings.");
+
             var settingsWindow = new SettingsWindow { Owner = this };
             settingsWindow.Closed += SettingsWindow_Closed;
             this.Hide();
             settingsWindow.ShowDialog();
         }
+
         private void SettingsWindow_Closed(object sender, EventArgs e)
         {
             _isOpeningSettings = false;
-            ReloadItemsFromConfig();
-            if(sender is SettingsWindow sw) { sw.Closed -= SettingsWindow_Closed; }
+            ReloadItemsFromConfig(); // This will load from the file (either original or settings-saved)
+            if(sender is SettingsWindow sw) sw.Closed -= SettingsWindow_Closed;
             this.Show(); this.Activate(); this.Focus();
         }
+
         private void ReloadItemsFromConfig()
         {
+            Debug.WriteLine("ReloadItemsFromConfig called.");
             var updatedItems = new ObservableCollection<LauncherItem>(_configManager.LoadLauncherItems());
             LauncherItemsOnCanvas = updatedItems;
             UpdateNoItemsMessage();
             _dragHistory.ClearHistory();
         }
 
-        // --- Window Dragging and Resizing ---
         private void MenuBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if(e.Handled) return; // If icon click handled it, don't drag window
+
+            Debug.WriteLine("MenuBorder_MouseLeftButtonDown");
             if(e.ButtonState == MouseButtonState.Pressed)
             {
-                var originalSourceElement = e.OriginalSource as DependencyObject;
-                bool canDragWindow = false;
-                if(originalSourceElement == MenuBorder) { canDragWindow = true; }
-                else
-                {
-                    DependencyObject current = originalSourceElement;
-                    while(current != null && current != MenuBorder)
-                    {
-                        if(current is Grid titleBarGrid && Grid.GetRow(titleBarGrid) == 0 && VisualTreeHelper.GetParent(titleBarGrid) == MenuBorder)
-                        {
-                            if(!(e.OriginalSource is System.Windows.Controls.Button btn && btn.Name == "OptionsButton") &&
-                                !(e.OriginalSource is System.Windows.Shapes.Path path && VisualTreeHelper.GetParent(path) is System.Windows.Controls.Button parentBtn && parentBtn.Name == "OptionsButton"))
-                            {
-                                canDragWindow = true;
-                            }
-                            break;
-                        }
-                        current = VisualTreeHelper.GetParent(current);
-                    }
-                }
-                if(canDragWindow) { try { this.DragMove(); } catch(InvalidOperationException) { /* Can happen */ } }
+                try { this.DragMove(); } catch(InvalidOperationException) { /* Can happen */ }
             }
         }
-        private void ResizeDragDelta(object sender, DragDeltaEventArgs e)
-        {
-            double newWidth = this.Width + e.HorizontalChange; double newHeight = this.Height + e.VerticalChange;
-            if(newWidth >= this.MinWidth) this.Width = newWidth; if(newHeight >= this.MinHeight) this.Height = newHeight;
-        }
+        private void ResizeDragDelta(object sender, DragDeltaEventArgs e) { double nW = Width + e.HorizontalChange, nH = Height + e.VerticalChange; if(nW >= MinWidth) Width = nW; if(nH >= MinHeight) Height = nH; }
 
-        // --- Icon Context Menu Handlers ---
         private void IconBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
             Debug.WriteLine("IconBorder_ContextMenuOpening");
             if(sender is FrameworkElement fe && fe.DataContext is LauncherItem item)
             {
-                if(fe.ContextMenu != null)
-                {
-                    fe.ContextMenu.DataContext = item;
-                    Debug.WriteLine($"ContextMenu DataContext set to: {item.DisplayName}");
-                }
-                else { Debug.WriteLine("ContextMenu on IconBorder is null!"); e.Handled = true; }
+                if(fe.ContextMenu != null) { fe.ContextMenu.DataContext = item; Debug.WriteLine($"CtxMenu DC set: {item.DisplayName}"); }
+                else { Debug.WriteLine("Ctx on IconBorder is null!"); e.Handled = true; }
             }
-            else { Debug.WriteLine("Sender is not FrameworkElement or DataContext is not LauncherItem in ContextMenuOpening."); e.Handled = true; }
+            else { Debug.WriteLine("Sender not FE or DC not LI in CtxMenuOpening."); e.Handled = true; }
         }
 
         private void IconBorder_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
             Debug.WriteLine("IconBorder_PreviewMouseRightButtonUp");
-            if(e.LeftButton == MouseButtonState.Pressed && _leftMouseDownOnIcon)
-            {
-                Debug.WriteLine("ContextMenu skipped because left button is also pressed on icon.");
-                return;
-            }
-            if(_isCurrentlyDragging)
-            {
-                Debug.WriteLine("ContextMenu skipped because _isCurrentlyDragging is true.");
-                return;
-            }
-
-            // The ContextMenuOpening event should have set the DataContext.
-            // WPF will typically open the menu automatically if e.Handled was not set to true
-            // in ContextMenuOpening AND a ContextMenu is defined.
-            // Explicitly opening it here can be a fallback or if more control is needed.
-            if(sender is FrameworkElement fe && fe.ContextMenu != null)
-            {
-                // If you want to be absolutely sure it opens, uncomment:
-                // fe.ContextMenu.IsOpen = true;
-                // e.Handled = true; // if you uncomment IsOpen = true
-            }
+            if(e.LeftButton == MouseButtonState.Pressed && _leftMouseDownOnIcon) { Debug.WriteLine("Ctx skipped: LBtn down."); return; }
+            if(_isCurrentlyDragging) { Debug.WriteLine("Ctx skipped: dragging."); return; }
         }
 
         private LauncherItem GetLauncherItemFromContextMenu(object sender)
         {
-            Debug.WriteLine($"GetLauncherItemFromContextMenu called by: {sender?.GetType().FullName}");
-            if(sender is MenuItem menuItem)
+            Debug.WriteLine($"GetLIFromCtxMenu by: {sender?.GetType().FullName}");
+            if(sender is MenuItem mi)
             {
-                // The MenuItem should inherit its DataContext from its parent ContextMenu
-                // which we set in IconBorder_ContextMenuOpening
-                if(menuItem.DataContext is LauncherItem itemFromMenuItemDC)
-                {
-                    Debug.WriteLine($"Found LauncherItem '{itemFromMenuItemDC.DisplayName}' from MenuItem's DataContext.");
-                    return itemFromMenuItemDC;
-                }
-                else
-                {
-                    Debug.WriteLine($"MenuItem's DataContext is NOT LauncherItem. It is: {menuItem.DataContext?.GetType().FullName}. Trying parent ContextMenu.");
-                    if(menuItem.Parent is ContextMenu parentContextMenu && parentContextMenu.DataContext is LauncherItem itemFromParentDC)
-                    {
-                        Debug.WriteLine($"Found LauncherItem '{itemFromParentDC.DisplayName}' from PARENT ContextMenu's DataContext.");
-                        return itemFromParentDC;
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"Parent ContextMenu's DataContext also not LauncherItem. Parent DC: {(menuItem.Parent as ContextMenu)?.DataContext?.GetType().FullName}");
-                    }
-                }
+                if(mi.DataContext is LauncherItem itemDC) { Debug.WriteLine($"Found LI '{itemDC.DisplayName}' from MI.DC."); return itemDC; }
+                Debug.WriteLine($"MI.DC not LI: {mi.DataContext?.GetType().FullName}. Trying Parent CtxMenu.");
+                if(mi.Parent is ContextMenu pcm && pcm.DataContext is LauncherItem itemPCM) { Debug.WriteLine($"Found LI '{itemPCM.DisplayName}' from PCM.DC."); return itemPCM; }
+                Debug.WriteLine($"PCM.DC also not LI: {(mi.Parent as ContextMenu)?.DataContext?.GetType().FullName}");
             }
-            Debug.WriteLine("Could not get LauncherItem from ContextMenu sender.");
-            return null;
+            Debug.WriteLine("Could not get LI from CtxMenu sender."); return null;
         }
 
-        private void IconContextMenu_Launch_Click(object sender, RoutedEventArgs e)
-        {
-            Debug.WriteLine("IconContextMenu_Launch_Click");
-            var item = GetLauncherItemFromContextMenu(sender);
-            if(item != null) { LaunchItem(item); this.Close(); }
-            else { Debug.WriteLine("Launch_Click: Item was null."); }
-        }
-
+        private void IconContextMenu_Launch_Click(object sender, RoutedEventArgs e) { Debug.WriteLine("CtxMenuLaunch"); var i = GetLauncherItemFromContextMenu(sender); if(i != null) { LaunchItem(i); Close(); } else Debug.WriteLine("LaunchClick: Null item"); }
         private void IconContextMenu_OpenFileLocation_Click(object sender, RoutedEventArgs e)
         {
-            Debug.WriteLine("IconContextMenu_OpenFileLocation_Click");
-            var item = GetLauncherItemFromContextMenu(sender);
-            if(item != null && !string.IsNullOrWhiteSpace(item.ExecutablePath))
-            {
-                try
-                {
-                    string expandedPath = Environment.ExpandEnvironmentVariables(item.ExecutablePath);
-                    if(File.Exists(expandedPath)) Process.Start("explorer.exe", $"/select,\"{expandedPath}\"");
-                    else if(Directory.Exists(expandedPath)) Process.Start("explorer.exe", $"\"{expandedPath}\"");
-                    else
-                    {
-                        string dir = Path.GetDirectoryName(expandedPath);
-                        if(Directory.Exists(dir)) Process.Start("explorer.exe", $"\"{dir}\"");
-                        else MessageBox.Show("Cannot determine file location.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-                }
-                catch(Exception ex) { MessageBox.Show($"Error opening file location: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
-            }
-            else { Debug.WriteLine("OpenFileLocation_Click: Item or path was null/empty."); }
+            Debug.WriteLine("CtxMenuOpenLocation"); var i = GetLauncherItemFromContextMenu(sender);
+            if(i != null && !string.IsNullOrWhiteSpace(i.ExecutablePath)) { try { string p = Environment.ExpandEnvironmentVariables(i.ExecutablePath); if(File.Exists(p)) Process.Start("explorer.exe", $"/select,\"{p}\""); else if(Directory.Exists(p)) Process.Start("explorer.exe", $"\"{p}\""); else { string d = Path.GetDirectoryName(p); if(Directory.Exists(d)) Process.Start("explorer.exe", $"\"{d}\""); else MessageBox.Show("Cannot find location.", "Error"); } } catch(Exception ex) { MessageBox.Show($"Err: {ex.Message}", "Error"); } } else Debug.WriteLine("OpenLocationClick: Null item/path");
         }
-
-        private void IconContextMenu_Properties_Click(object sender, RoutedEventArgs e)
+        private void IconContextMenu_EditSettings_Click(object sender, RoutedEventArgs e)
         {
-            Debug.WriteLine("IconContextMenu_Properties_Click");
-            var item = GetLauncherItemFromContextMenu(sender);
-            if(item != null)
-            {
-                _isOpeningSettings = true;
-                var editor = new LauncherItemEditorWindow(item) { Owner = this };
-                if(editor.ShowDialog() == true)
-                {
-                    var originalItem = LauncherItemsOnCanvas.FirstOrDefault(i => i.Id == item.Id);
-                    int index = (originalItem != null) ? LauncherItemsOnCanvas.IndexOf(originalItem) : -1;
-
-                    if(index != -1)
-                    {
-                        LauncherItemsOnCanvas[index] = editor.Item;
-                        SaveAllLauncherItemPositions();
-                        Debug.WriteLine($"Properties updated for {editor.Item.DisplayName}");
-                    }
-                    else
-                    {
-                        Debug.WriteLine($"Could not find original item {item.DisplayName} to update properties.");
-                    }
-                }
-                _isOpeningSettings = false; this.Focus();
-            }
-            else { Debug.WriteLine("Properties_Click: Item was null."); }
+            Debug.WriteLine("CtxMenuEditSettings"); var i = GetLauncherItemFromContextMenu(sender);
+            if(i != null) { _isOpeningSettings = true; var ed = new LauncherItemEditorWindow(i) { Owner = this }; if(ed.ShowDialog() == true) { var oI = LauncherItemsOnCanvas.FirstOrDefault(x => x.Id == i.Id); int idx = oI != null ? LauncherItemsOnCanvas.IndexOf(oI) : -1; if(idx != -1) { LauncherItemsOnCanvas[idx] = ed.Item; SaveAllLauncherItemPositions(); Debug.WriteLine($"EditSettings updated: {ed.Item.DisplayName}"); } else Debug.WriteLine($"EditSettings: Cannot find original {i.DisplayName}"); } _isOpeningSettings = false; Focus(); } else Debug.WriteLine("EditSettingsClick: Null item");
         }
-
+        private void IconContextMenu_FileProperties_Click(object sender, RoutedEventArgs e)
+        {
+            Debug.WriteLine("CtxMenuFileProps"); var i = GetLauncherItemFromContextMenu(sender);
+            if(i != null && !string.IsNullOrWhiteSpace(i.ExecutablePath)) { string fp = Environment.ExpandEnvironmentVariables(i.ExecutablePath); if(File.Exists(fp) || Directory.Exists(fp)) { try { SHELLEXECUTEINFO sei = new SHELLEXECUTEINFO { cbSize = Marshal.SizeOf(typeof(SHELLEXECUTEINFO)), fMask = SEE_MASK_INVOKEIDLIST, hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle, lpVerb = "properties", lpFile = fp, nShow = SW_SHOWNORMAL }; if(!ShellExecuteEx(ref sei)) { int err = Marshal.GetLastWin32Error(); MessageBox.Show($"Cannot show file props. Err: {err}", "Error"); Debug.WriteLine($"ShellEx Err: {err} for {fp}"); } else Debug.WriteLine($"Showing props for {fp}"); } catch(Exception ex) { MessageBox.Show($"Err showing file props: {ex.Message}", "Error"); Debug.WriteLine($"Ex showing props: {ex}"); } } else MessageBox.Show($"Not found: {fp}", "Error"); } else Debug.WriteLine("FilePropsClick: Null item/path");
+        }
         private void IconContextMenu_Remove_Click(object sender, RoutedEventArgs e)
         {
-            Debug.WriteLine("IconContextMenu_Remove_Click");
-            var item = GetLauncherItemFromContextMenu(sender);
-            if(item != null)
-            {
-                var result = MessageBox.Show($"Are you sure you want to remove '{item.DisplayName}' from the menu?", "Confirm Removal", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if(result == MessageBoxResult.Yes)
-                {
-                    LauncherItemsOnCanvas.Remove(item);
-                    UpdateNoItemsMessage();
-                    _dragHistory.ClearHistory();
-                    SaveAllLauncherItemPositions();
-                    Debug.WriteLine($"Removed item: {item.DisplayName}");
-                }
-            }
-            else { Debug.WriteLine("Remove_Click: Item was null."); }
+            Debug.WriteLine("CtxMenuRemove"); var i = GetLauncherItemFromContextMenu(sender);
+            if(i != null) { if(MessageBox.Show($"Remove '{i.DisplayName}'?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes) { LauncherItemsOnCanvas.Remove(i); UpdateNoItemsMessage(); _dragHistory.ClearHistory(); SaveAllLauncherItemPositions(); Debug.WriteLine($"Removed: {i.DisplayName}"); } } else Debug.WriteLine("RemoveClick: Null item");
         }
-        private void BackgroundContextMenu_AddItem_Click(object sender, RoutedEventArgs e) { OpenSettingsWindow(); }
+        private void BackgroundContextMenu_AddItem_Click(object sender, RoutedEventArgs e) => OpenSettingsWindow();
     }
 }

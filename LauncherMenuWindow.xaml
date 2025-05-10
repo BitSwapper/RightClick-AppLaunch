@@ -44,17 +44,18 @@
                     PreviewMouseLeftButtonUp="Icon_PreviewMouseLeftButtonUp"   
                     PreviewMouseRightButtonUp="IconBorder_PreviewMouseRightButtonUp"
                     ContextMenuOpening="IconBorder_ContextMenuOpening">
-                <!-- ADD THIS EVENT -->
                 <Border.ContextMenu>
-                    <!-- REMOVE DataContext binding from here. We'll set it in code-behind. -->
                     <ContextMenu x:Name="IconCtxMenu">
                         <MenuItem Header="Launch" 
                                   Click="IconContextMenu_Launch_Click"/>
-                        <!-- CommandParameter will be set in code if needed, or retrieved from ContextMenu's Tag/DataContext -->
                         <MenuItem Header="Open File Location" 
                                   Click="IconContextMenu_OpenFileLocation_Click"/>
-                        <MenuItem Header="Properties..." 
-                                  Click="IconContextMenu_Properties_Click"/>
+                        <Separator/>
+                        <MenuItem Header="Edit Launcher Settings..." 
+                                  Click="IconContextMenu_EditSettings_Click"/>
+                        <MenuItem Header="File Properties..." 
+                                  Click="IconContextMenu_FileProperties_Click"/>
+                        <Separator/>
                         <MenuItem Header="Remove" 
                                   Click="IconContextMenu_Remove_Click"/>
                     </ContextMenu>
