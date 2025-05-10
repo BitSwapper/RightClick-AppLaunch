@@ -1,30 +1,28 @@
-﻿using System;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace RightClickAppLauncher.Converters
-{
-    [ValueConversion(typeof(bool), typeof(Visibility))]
-    public class BooleanToVisibilityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            bool boolValue = false;
-            if(value is bool)
-            {
-                boolValue = (bool)value;
-            }
-            return boolValue ? Visibility.Visible : Visibility.Collapsed;
-        }
+namespace RightClickAppLauncher.Converters;
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+[ValueConversion(typeof(bool), typeof(Visibility))]
+public class BooleanToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        bool boolValue = false;
+        if(value is bool)
         {
-            if(value is Visibility visibilityValue)
-            {
-                return visibilityValue == Visibility.Visible;
-            }
-            return false;
+            boolValue = (bool)value;
         }
+        return boolValue ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if(value is Visibility visibilityValue)
+        {
+            return visibilityValue == Visibility.Visible;
+        }
+        return false;
     }
 }
