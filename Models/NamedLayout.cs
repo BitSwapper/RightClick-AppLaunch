@@ -7,16 +7,20 @@ namespace RightClickAppLauncher.Models
     {
         public Guid Id { get; set; } // Unique ID for this saved layout entry
         public string Name { get; set; }
-        public string LayoutJson { get; set; } // JSON string of List<LauncherItem>
+        public string LayoutJson { get; set; }
         public DateTime SavedDate { get; set; }
         public double WindowWidth { get; set; }
         public double WindowHeight { get; set; }
 
-        // Parameterless constructor for deserialization
+        public double IconSize { get; set; }
+        public double IconSpacing { get; set; }
+
         public NamedLayout()
         {
             Id = Guid.NewGuid();
             SavedDate = DateTime.UtcNow;
+            IconSize = 20;
+            IconSpacing = 10;
         }
     }
 }

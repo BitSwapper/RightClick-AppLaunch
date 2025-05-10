@@ -7,6 +7,7 @@
         xmlns:converters="clr-namespace:RightClickAppLauncher.Converters"
         mc:Ignorable="d"
         Title="Edit Launcher Item" Height="420" Width="500"
+        Icon="pack://application:,,,/Resources/Gear.ico"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="NoResize">
     <!-- Rest of your XAML from your error report is correct -->
     <Window.Resources>

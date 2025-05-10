@@ -11,6 +11,7 @@
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         mc:Ignorable="d"
         Title="App Launcher"
+        Icon="pack://application:,,,/Resources/Gear.ico"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True"
         Width="300" Height="250" 

@@ -6,7 +6,8 @@
         xmlns:local="clr-namespace:RightClickAppLauncher"
         xmlns:converters="clr-namespace:RightClickAppLauncher.Converters"
         mc:Ignorable="d"
-        Title="Settings - Right Click App Launcher" Height="700" Width="600"
+        Icon="Resources/Gear.ico"
+        Title="Settings - Right Click App Launcher" Height="850" Width="600"
     WindowStartupLocation="CenterScreen" ShowInTaskbar="False" MinHeight="450" MinWidth="450">
     <Window.Resources>
         <converters:IconPathToImageSourceConverter x:Key="IconPathToImageSourceConverter"/>

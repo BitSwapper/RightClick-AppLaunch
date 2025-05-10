@@ -128,7 +128,166 @@ namespace RightClickAppLauncher.UI
             EnsureWindowIsOnScreen();
         }
 
-        // Update ApplyIconSize method
+        // Update the SaveLayoutAs_Click method
+        private void SaveLayoutAs_Click(object sender, RoutedEventArgs e)
+        {
+            _isShowingInputDialog = true;
+
+            InputDialog inputDialog = new InputDialog("Enter name for this layout:", "My Layout " + DateTime.Now.ToString("yyyy-MM-dd HHmm"))
+            { Owner = this };
+
+            if(inputDialog.ShowDialog() == true)
+            {
+                string layoutName = inputDialog.ResponseText.Trim();
+                if(string.IsNullOrWhiteSpace(layoutName))
+                {
+                    MessageBox.Show("Layout name cannot be empty.", "Invalid Name", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _isShowingInputDialog = false;
+                    return;
+                }
+
+                System.Collections.Generic.List<LauncherItem> currentItemsToSave = new System.Collections.Generic.List<LauncherItem>(LauncherItemsOnCanvas);
+                string currentLayoutItemsJson = JsonConvert.SerializeObject(currentItemsToSave, Formatting.Indented);
+
+                System.Collections.Generic.List<NamedLayout> allSavedLayouts = GetSavedNamedLayouts();
+
+                NamedLayout existingLayout = allSavedLayouts.FirstOrDefault(L => L.Name.Equals(layoutName, StringComparison.OrdinalIgnoreCase));
+                if(existingLayout != null)
+                {
+                    var result = MessageBox.Show($"A layout named '{layoutName}' already exists. Overwrite it?", "Confirm Overwrite", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if(result == MessageBoxResult.No)
+                    {
+                        _isShowingInputDialog = false;
+                        return;
+                    }
+                    existingLayout.LayoutJson = currentLayoutItemsJson;
+                    existingLayout.SavedDate = DateTime.UtcNow;
+                    existingLayout.WindowWidth = this.ActualWidth;
+                    existingLayout.WindowHeight = this.ActualHeight;
+                    existingLayout.IconSize = Settings.Default.IconSize;
+                    existingLayout.IconSpacing = Settings.Default.IconSpacing;
+                }
+                else
+                {
+                    allSavedLayouts.Add(new NamedLayout
+                    {
+                        Name = layoutName,
+                        LayoutJson = currentLayoutItemsJson,
+                        WindowWidth = this.ActualWidth,
+                        WindowHeight = this.ActualHeight,
+                        IconSize = Settings.Default.IconSize,
+                        IconSpacing = Settings.Default.IconSpacing
+                    });
+                }
+
+                PersistAllNamedLayouts(allSavedLayouts);
+                MessageBox.Show($"Layout '{layoutName}' saved with icon settings.", "Layout Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+
+            _isShowingInputDialog = false;
+        }
+
+        // Update the ReloadItemsFromConfig method
+        private void ReloadItemsFromConfig(bool loadDefaultLayout = true, NamedLayout layoutToLoad = null)
+        {
+            Debug.WriteLine($"ReloadItemsFromConfig. LoadDefault: {loadDefaultLayout}, Specific Layout: {layoutToLoad?.Name ?? "N/A"}");
+            System.Collections.Generic.List<LauncherItem> itemsToLoad = null;
+
+            if(!loadDefaultLayout && layoutToLoad != null)
+            {
+                try
+                {
+                    if(string.IsNullOrWhiteSpace(layoutToLoad.LayoutJson))
+                    {
+                        Debug.WriteLine($"Layout '{layoutToLoad.Name}' has empty JSON. Loading default.");
+                        itemsToLoad = _configManager.LoadLauncherItems();
+                    }
+                    else
+                    {
+                        itemsToLoad = JsonConvert.DeserializeObject<System.Collections.Generic.List<LauncherItem>>(layoutToLoad.LayoutJson);
+                        Debug.WriteLine($"Loaded specific layout: {layoutToLoad.Name}");
+
+                        // Restore window dimensions if available
+                        if(layoutToLoad.WindowWidth > 0 && layoutToLoad.WindowHeight > 0)
+                        {
+                            this.Width = layoutToLoad.WindowWidth;
+                            this.Height = layoutToLoad.WindowHeight;
+                        }
+
+                        // Restore icon settings if available (check for non-zero values for backward compatibility)
+                        if(layoutToLoad.IconSize > 0)
+                        {
+                            Settings.Default.IconSize = layoutToLoad.IconSize;
+                            CurrentIconSize = layoutToLoad.IconSize;
+                        }
+
+                        if(layoutToLoad.IconSpacing >= 0) // IconSpacing can be 0, so we check for >= 0
+                        {
+                            Settings.Default.IconSpacing = layoutToLoad.IconSpacing;
+                        }
+
+                        // Save the settings so they persist
+                        Settings.Default.Save();
+
+                        // Apply the icon size to refresh the UI
+                        ApplyIconSize();
+
+                        Debug.WriteLine($"Applied icon size: {layoutToLoad.IconSize}, spacing: {layoutToLoad.IconSpacing}");
+                    }
+                }
+                catch(Exception ex)
+                {
+                    MessageBox.Show($"Error deserializing layout '{layoutToLoad.Name}': {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    itemsToLoad = _configManager.LoadLauncherItems();
+                }
+            }
+            else
+            {
+                itemsToLoad = _configManager.LoadLauncherItems();
+            }
+
+            LauncherItemsOnCanvas = new ObservableCollection<LauncherItem>(itemsToLoad ?? new System.Collections.Generic.List<LauncherItem>());
+            UpdateNoItemsMessage();
+            _dragHistory.ClearHistory();
+        }
+
+        // Update the GetSavedNamedLayouts method to handle backward compatibility
+        private System.Collections.Generic.List<NamedLayout> GetSavedNamedLayouts()
+        {
+            if(Settings.Default.SavedLayouts == null)
+            {
+                Settings.Default.SavedLayouts = new StringCollection();
+                return new System.Collections.Generic.List<NamedLayout>();
+            }
+
+            System.Collections.Generic.List<NamedLayout> namedLayouts = new System.Collections.Generic.List<NamedLayout>();
+            foreach(string layoutEntryJson in Settings.Default.SavedLayouts)
+            {
+                if(string.IsNullOrWhiteSpace(layoutEntryJson)) continue;
+                try
+                {
+                    NamedLayout namedLayout = JsonConvert.DeserializeObject<NamedLayout>(layoutEntryJson);
+                    if(namedLayout != null)
+                    {
+                        // For backward compatibility: if icon settings are missing (0), use current defaults
+                        if(namedLayout.IconSize <= 0)
+                            namedLayout.IconSize = Settings.Default.IconSize;
+
+                        // IconSpacing can be 0, so we only check for negative values
+                        if(namedLayout.IconSpacing < 0)
+                            namedLayout.IconSpacing = Settings.Default.IconSpacing;
+
+                        namedLayouts.Add(namedLayout);
+                    }
+                }
+                catch(Exception ex)
+                {
+                    Debug.WriteLine($"Error deserializing a NamedLayout entry: {ex.Message} - JSON: {layoutEntryJson}");
+                }
+            }
+            return namedLayouts;
+        }
+
         private void ApplyIconSize()
         {
             CurrentIconSize = Settings.Default.IconSize;
@@ -446,49 +605,6 @@ namespace RightClickAppLauncher.UI
         }
 
 
-        private void ReloadItemsFromConfig(bool loadDefaultLayout = true, NamedLayout layoutToLoad = null)
-        {
-            Debug.WriteLine($"ReloadItemsFromConfig. LoadDefault: {loadDefaultLayout}, Specific Layout: {layoutToLoad?.Name ?? "N/A"}");
-            System.Collections.Generic.List<LauncherItem> itemsToLoad = null;
-
-            if(!loadDefaultLayout && layoutToLoad != null)
-            {
-                try
-                {
-                    if(string.IsNullOrWhiteSpace(layoutToLoad.LayoutJson))
-                    {
-                        Debug.WriteLine($"Layout '{layoutToLoad.Name}' has empty JSON. Loading default.");
-                        itemsToLoad = _configManager.LoadLauncherItems();
-                    }
-                    else
-                    {
-                        itemsToLoad = JsonConvert.DeserializeObject<System.Collections.Generic.List<LauncherItem>>(layoutToLoad.LayoutJson);
-                        Debug.WriteLine($"Loaded specific layout: {layoutToLoad.Name}");
-
-                        // Restore window dimensions if available
-                        if(layoutToLoad.WindowWidth > 0 && layoutToLoad.WindowHeight > 0)
-                        {
-                            this.Width = layoutToLoad.WindowWidth;
-                            this.Height = layoutToLoad.WindowHeight;
-                        }
-                    }
-                }
-                catch(Exception ex)
-                {
-                    MessageBox.Show($"Error deserializing layout '{layoutToLoad.Name}': {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    itemsToLoad = _configManager.LoadLauncherItems();
-                }
-            }
-            else
-            {
-                itemsToLoad = _configManager.LoadLauncherItems();
-            }
-
-            LauncherItemsOnCanvas = new ObservableCollection<LauncherItem>(itemsToLoad ?? new System.Collections.Generic.List<LauncherItem>());
-            UpdateNoItemsMessage();
-            _dragHistory.ClearHistory();
-        }
-
         private void MenuBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if(e.Handled) { Debug.WriteLine("MenuBorder LBtnDown: Handled by icon."); return; }
@@ -604,16 +720,33 @@ namespace RightClickAppLauncher.UI
             if(i != null)
             {
                 _isOpeningSettings = true;
-                var ed = new LauncherItemEditorWindow(i) { Owner = this };
+
+                // Clone the item to preserve original position data
+                var editItem = new LauncherItem
+                {
+                    Id = i.Id,
+                    DisplayName = i.DisplayName,
+                    ExecutablePath = i.ExecutablePath,
+                    IconPath = i.IconPath,
+                    Arguments = i.Arguments,
+                    WorkingDirectory = i.WorkingDirectory,
+                    X = i.X,  // Preserve position
+                    Y = i.Y   // Preserve position
+                };
+
+                var ed = new LauncherItemEditorWindow(editItem) { Owner = this };
                 if(ed.ShowDialog() == true)
                 {
                     var oI = LauncherItemsOnCanvas.FirstOrDefault(x => x.Id == i.Id);
                     int idx = oI != null ? LauncherItemsOnCanvas.IndexOf(oI) : -1;
                     if(idx != -1)
                     {
+                        // Preserve the original position when updating
+                        ed.Item.X = oI.X;
+                        ed.Item.Y = oI.Y;
                         LauncherItemsOnCanvas[idx] = ed.Item;
                         SaveCurrentLayoutAsDefault();
-                        Debug.WriteLine($"EditSettings updated: {ed.Item.DisplayName}");
+                        Debug.WriteLine($"EditSettings updated: {ed.Item.DisplayName} at position ({ed.Item.X}, {ed.Item.Y})");
                     }
                     else Debug.WriteLine($"EditSettings: Cannot find original {i.DisplayName}");
                 }
@@ -699,34 +832,6 @@ namespace RightClickAppLauncher.UI
             this.Focus();
         }
 
-        private System.Collections.Generic.List<NamedLayout> GetSavedNamedLayouts()
-        {
-            if(Settings.Default.SavedLayouts == null)
-            {
-                Settings.Default.SavedLayouts = new StringCollection();
-                return new System.Collections.Generic.List<NamedLayout>();
-            }
-
-            System.Collections.Generic.List<NamedLayout> namedLayouts = new System.Collections.Generic.List<NamedLayout>();
-            foreach(string layoutEntryJson in Settings.Default.SavedLayouts)
-            {
-                if(string.IsNullOrWhiteSpace(layoutEntryJson)) continue;
-                try
-                {
-                    NamedLayout namedLayout = JsonConvert.DeserializeObject<NamedLayout>(layoutEntryJson);
-                    if(namedLayout != null)
-                    {
-                        namedLayouts.Add(namedLayout);
-                    }
-                }
-                catch(Exception ex)
-                {
-                    Debug.WriteLine($"Error deserializing a NamedLayout entry: {ex.Message} - JSON: {layoutEntryJson}");
-                }
-            }
-            return namedLayouts;
-        }
-
         private void PersistAllNamedLayouts(System.Collections.Generic.List<NamedLayout> layoutsToSave)
         {
             if(Settings.Default.SavedLayouts == null)
@@ -773,61 +878,6 @@ namespace RightClickAppLauncher.UI
                 }
             }
         }
-
-        private void SaveLayoutAs_Click(object sender, RoutedEventArgs e)
-        {
-            _isShowingInputDialog = true;
-
-            InputDialog inputDialog = new InputDialog("Enter name for this layout:", "My Layout " + DateTime.Now.ToString("yyyy-MM-dd HHmm"))
-            { Owner = this };
-
-            if(inputDialog.ShowDialog() == true)
-            {
-                string layoutName = inputDialog.ResponseText.Trim();
-                if(string.IsNullOrWhiteSpace(layoutName))
-                {
-                    MessageBox.Show("Layout name cannot be empty.", "Invalid Name", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    _isShowingInputDialog = false;
-                    return;
-                }
-
-                System.Collections.Generic.List<LauncherItem> currentItemsToSave = new System.Collections.Generic.List<LauncherItem>(LauncherItemsOnCanvas);
-                string currentLayoutItemsJson = JsonConvert.SerializeObject(currentItemsToSave, Formatting.Indented);
-
-                System.Collections.Generic.List<NamedLayout> allSavedLayouts = GetSavedNamedLayouts();
-
-                NamedLayout existingLayout = allSavedLayouts.FirstOrDefault(L => L.Name.Equals(layoutName, StringComparison.OrdinalIgnoreCase));
-                if(existingLayout != null)
-                {
-                    var result = MessageBox.Show($"A layout named '{layoutName}' already exists. Overwrite it?", "Confirm Overwrite", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                    if(result == MessageBoxResult.No)
-                    {
-                        _isShowingInputDialog = false;
-                        return;
-                    }
-                    existingLayout.LayoutJson = currentLayoutItemsJson;
-                    existingLayout.SavedDate = DateTime.UtcNow;
-                    existingLayout.WindowWidth = this.ActualWidth;
-                    existingLayout.WindowHeight = this.ActualHeight;
-                }
-                else
-                {
-                    allSavedLayouts.Add(new NamedLayout
-                    {
-                        Name = layoutName,
-                        LayoutJson = currentLayoutItemsJson,
-                        WindowWidth = this.ActualWidth,
-                        WindowHeight = this.ActualHeight
-                    });
-                }
-
-                PersistAllNamedLayouts(allSavedLayouts);
-                MessageBox.Show($"Layout '{layoutName}' saved.", "Layout Saved", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-
-            _isShowingInputDialog = false;
-        }
-
         private void LoadSpecificLayout_Click(object sender, RoutedEventArgs e)
         {
             if(sender is MenuItem menuItem && menuItem.Tag is NamedLayout layoutToLoad)

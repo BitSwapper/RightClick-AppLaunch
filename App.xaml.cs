@@ -52,24 +52,20 @@ namespace RightClickAppLauncher
             _notifyIcon = new NotifyIcon();
             _notifyIcon.Text = StaticVals.AppName;
 
-            // Load icon from embedded resource or file
+            // Load icon from Resources/Gear.ico
             try
             {
-                // Assuming you have an App.ico file in your project, set as "Embedded Resource"
-                Stream iconStream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/App.ico"))?.Stream;
+                var iconUri = new Uri("pack://application:,,,/Resources/Gear.ico");
+                var iconStream = System.Windows.Application.GetResourceStream(iconUri);
+
                 if(iconStream != null)
                 {
-                    _notifyIcon.Icon = new System.Drawing.Icon(iconStream);
-                    iconStream.Dispose();
+                    _notifyIcon.Icon = new System.Drawing.Icon(iconStream.Stream);
+                    Debug.WriteLine("System tray icon loaded successfully");
                 }
-                else // Fallback if embedded icon not found
+                else
                 {
-                    Assembly currentAssembly = Assembly.GetExecutingAssembly();
-                    string[] manifestResourceNames = currentAssembly.GetManifestResourceNames();
-                    Debug.WriteLine("Available manifest resources:");
-                    foreach(string name in manifestResourceNames) Debug.WriteLine(name);
-
-                    // Try loading a default system icon if App.ico is missing
+                    // Fallback to system icon
                     _notifyIcon.Icon = SystemIcons.Application;
                     Debug.WriteLine("Using SystemIcons.Application as tray icon.");
                 }
@@ -79,7 +75,6 @@ namespace RightClickAppLauncher
                 _notifyIcon.Icon = SystemIcons.Application; // Fallback icon
                 Debug.WriteLine($"Error loading tray icon: {ex.Message}");
             }
-
 
             var contextMenu = new ContextMenuStrip();
             contextMenu.Items.Add("Settings...", null, OnSettingsClicked);
@@ -154,6 +149,14 @@ namespace RightClickAppLauncher
                 _taskbarMonitor?.Dispose();
                 _notifyIcon?.Dispose();
             }
+
+            if(_notifyIcon != null)
+            {
+                _notifyIcon.Visible = false;
+                _notifyIcon.Dispose();
+                _notifyIcon = null;
+            }
+
             base.OnExit(e);
             Debug.WriteLine($"{StaticVals.AppName} exited.");
         }
