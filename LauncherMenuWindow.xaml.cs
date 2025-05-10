@@ -54,7 +54,8 @@ namespace RightClickAppLauncher.UI
         }
 
 
-
+        private double GridCellSize => this.CurrentIconSize + 12 + Settings.Default.IconSpacing;
+        private const double StackPadding = 5.0;
         private Point _mouseDragStartPoint_CanvasRelative;
         private FrameworkElement _draggedItemVisual;
         private LauncherItem _draggedLauncherItemModel;
@@ -89,8 +90,7 @@ namespace RightClickAppLauncher.UI
         private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
 
         // Properties for dynamic sizing based on settings
-        private double GridCellSize => Settings.Default.IconSize + 10 + Settings.Default.IconSpacing; // Icon size + border padding + user-defined spacing
-        private const double StackPadding = 5.0;
+
 
         public LauncherMenuWindow(ObservableCollection<LauncherItem> items, Point position, LauncherConfigManager configManager)
         {
@@ -523,17 +523,66 @@ namespace RightClickAppLauncher.UI
                 if(_isCurrentlyDragging)
                 {
                     if(_iconCanvasInstance == null || _draggedLauncherItemModel == null || _draggedItemVisual == null) return;
+
                     Point cMousePos = e.GetPosition(_iconCanvasInstance);
                     double oX = cMousePos.X - _mouseDragStartPoint_CanvasRelative.X;
                     double oY = cMousePos.Y - _mouseDragStartPoint_CanvasRelative.Y;
                     double nX = _originalItemPositionBeforeDrag.X + oX;
                     double nY = _originalItemPositionBeforeDrag.Y + oY;
+
+                    bool shiftPressed = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+
+                    if(shiftPressed)
+                    {
+                        double fullGridStep = this.GridCellSize;
+                        if(fullGridStep > 0)
+                        {
+                            // Use half the grid step for finer snapping
+                            double snapStep = fullGridStep / 2.0;
+
+                            // Ensure snapStep is still positive (it should be if fullGridStep is)
+                            if(snapStep > 0)
+                            {
+                                const double stackPaddingValue = StackPadding;
+
+                                nX = stackPaddingValue + Math.Round((nX - stackPaddingValue) / snapStep) * snapStep;
+                                nY = stackPaddingValue + Math.Round((nY - stackPaddingValue) / snapStep) * snapStep;
+                            }
+                        }
+                    }
+
                     double iW = _draggedItemVisual.ActualWidth;
                     double iH = _draggedItemVisual.ActualHeight;
-                    if(double.IsNaN(iW) || iW <= 0) iW = 30;
-                    if(double.IsNaN(iH) || iH <= 0) iH = 30;
+
+                    // Fallback for ActualWidth/Height if not yet rendered
+                    if(double.IsNaN(iW) || iW <= 0) iW = this.CurrentIconSize + 12;
+                    if(double.IsNaN(iH) || iH <= 0) iH = this.CurrentIconSize + 12;
+
+                    // Ensure snapped/dragged position is within canvas bounds
                     nX = Math.Max(0, Math.Min(nX, _iconCanvasInstance.ActualWidth - iW));
                     nY = Math.Max(0, Math.Min(nY, _iconCanvasInstance.ActualHeight - iH));
+
+                    // Ensure that if StackPadding was used for snapping, the position is not negative.
+                    // This ensures the first snap point aligns with StackPadding if applicable.
+                    if(shiftPressed && StackPadding > 0)
+                    {
+                        const double stackPaddingValue = StackPadding;
+
+                        // Check if the calculated nX/nY is less than StackPadding but positive.
+                        // If so, and if StackPadding is a valid snap target (or the first one), adjust.
+                        // This handles cases where a snap calculation might result in a value like 2.0 when StackPadding is 5.0.
+                        // The Rounding logic with stackPaddingValue should generally handle this, but this is a safeguard.
+                        if(nX < stackPaddingValue && nX > 0) nX = stackPaddingValue; // Or find the closest snap point >= StackPadding
+                        if(nY < stackPaddingValue && nY > 0) nY = stackPaddingValue; // Or find the closest snap point >= StackPadding
+
+                        // More robust way to ensure it's at least StackPadding, while respecting snap grid
+                        // If nX after snapping is less than stackPaddingValue, it should be forced to stackPaddingValue
+                        // (assuming stackPaddingValue itself is a valid start for the grid).
+                        nX = Math.Max(stackPaddingValue, nX);
+                        nY = Math.Max(stackPaddingValue, nY);
+                    }
+
+
                     _draggedLauncherItemModel.X = nX;
                     _draggedLauncherItemModel.Y = nY;
                 }

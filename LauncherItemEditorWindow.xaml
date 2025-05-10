@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:RightClickAppLauncher.UI" 
         xmlns:converters="clr-namespace:RightClickAppLauncher.Converters"
         mc:Ignorable="d"
-        Title="Edit Launcher Item" Height="300" Width="520"
+        Title="Edit Launcher Item" Height="320" Width="520"
         Icon="pack://application:,,,/Resources/Gear.ico"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" ResizeMode="NoResize">
     <Window.Resources>
@@ -18,6 +18,8 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
+            <!-- Small space -->
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -37,11 +39,11 @@
                  Margin="5" VerticalAlignment="Center" 
                  Text="{Binding Item.DisplayName, UpdateSourceTrigger=PropertyChanged}"/>
 
-        <!-- Icon Preview in its own column -->
-        <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="3" 
+        <!-- Icon Preview in its own column (spans rows 0-2 for display name, exe path, and icon path) -->
+        <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="3" 
                 BorderBrush="#CCCCCC" BorderThickness="1" 
                 Background="#F5F5F5" Padding="5" Margin="5,5,0,5"
-                Width="54" Height="54">
+                Width="54" Height="54" VerticalAlignment="Top">
             <Image Source="{Binding ElementName=IconPathTextBox, Path=Text, Converter={StaticResource IconPathToImageSourceConverter}}" 
                    Width="42" Height="42"
                    RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -55,40 +57,42 @@
         <Button Grid.Row="1" Grid.Column="2" Content="..." Margin="5" VerticalAlignment="Center" 
                 Click="BrowseExecutable_Click" Width="30" ToolTip="Browse for Executable"/>
 
-        <!-- Arguments -->
-        <Label Grid.Row="2" Grid.Column="0" Content="Launch Arguments:" VerticalAlignment="Center"/>
-        <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ArgumentsTextBox" 
-                 Margin="5" VerticalAlignment="Center" 
-                 Text="{Binding Item.Arguments, UpdateSourceTrigger=PropertyChanged}"/>
-
         <!-- Icon Path -->
-        <Label Grid.Row="3" Grid.Column="0" Content="Icon Path:" VerticalAlignment="Center"/>
-        <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" x:Name="IconPathTextBox" 
+        <Label Grid.Row="2" Grid.Column="0" Content="Icon Path:" VerticalAlignment="Center"/>
+        <TextBox Grid.Row="2" Grid.Column="1" x:Name="IconPathTextBox" 
                  Margin="5" VerticalAlignment="Center" 
                  Text="{Binding Item.IconPath, UpdateSourceTrigger=PropertyChanged}"/>
-        <Button Grid.Row="3" Grid.Column="3" Content="..." Margin="5,5,0,5" VerticalAlignment="Center" 
-                Click="BrowseIcon_Click" Width="44" ToolTip="Browse for Icon File"/>
+        <Button Grid.Row="2" Grid.Column="2" Content="..." Margin="5" VerticalAlignment="Center" 
+                Click="BrowseIcon_Click" Width="30" ToolTip="Browse for Icon File"/>
 
         <!-- Icon Help Text -->
-        <TextBlock Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3" 
+        <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" 
                    Text="Leave blank to use executable's icon." 
                    FontStyle="Italic" Foreground="Gray" Margin="5,0,5,5" TextWrapping="Wrap"/>
 
+        <!-- Row 4 is the small space separator -->
+
+        <!-- Launch Arguments -->
+        <Label Grid.Row="5" Grid.Column="0" Content="Launch Arguments:" VerticalAlignment="Center"/>
+        <TextBox Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ArgumentsTextBox" 
+                 Margin="5" VerticalAlignment="Center" 
+                 Text="{Binding Item.Arguments, UpdateSourceTrigger=PropertyChanged}"/>
+
         <!-- Working Directory -->
-        <Label Grid.Row="5" Grid.Column="0" Content="Working Directory:" VerticalAlignment="Center"/>
-        <TextBox Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" x:Name="WorkingDirectoryTextBox" 
+        <Label Grid.Row="6" Grid.Column="0" Content="Working Directory:" VerticalAlignment="Center"/>
+        <TextBox Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" x:Name="WorkingDirectoryTextBox" 
                  Margin="5" VerticalAlignment="Center" 
                  Text="{Binding Item.WorkingDirectory, UpdateSourceTrigger=PropertyChanged}"/>
-        <Button Grid.Row="5" Grid.Column="3" Content="..." Margin="5,5,0,5" VerticalAlignment="Center" 
+        <Button Grid.Row="6" Grid.Column="3" Content="..." Margin="5,5,0,5" VerticalAlignment="Center" 
                 Click="BrowseWorkingDirectory_Click" Width="44" ToolTip="Browse for Working Directory"/>
 
         <!-- Working Directory Help Text -->
-        <TextBlock Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="3" 
+        <TextBlock Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="3" 
                    Text="Leave blank to use executable's directory." 
                    FontStyle="Italic" Foreground="Gray" Margin="5,0,5,5" TextWrapping="Wrap"/>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="4" 
+        <StackPanel Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="4" 
                     Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
             <Button Content="OK" Width="80" Margin="5" IsDefault="True" Click="OkButton_Click"/>
             <Button Content="Cancel" Width="80" Margin="5" IsCancel="True" Click="CancelButton_Click"/>
