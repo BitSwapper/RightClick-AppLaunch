@@ -1,10 +1,9 @@
-﻿// File: BooleanToVisibilityConverter.cs
-using System;
+﻿using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace RightClickAppLauncher.Converters // Or RightClickAppLauncher.Converters
+namespace RightClickAppLauncher.Converters
 {
     [ValueConversion(typeof(bool), typeof(Visibility))]
     public class BooleanToVisibilityConverter : IValueConverter

@@ -1,5 +1,4 @@
-﻿// File: Managers/LauncherConfigManager.cs
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using RightClickAppLauncher.Models;
 using RightClickAppLauncher.Properties;
 using RightClickAppLauncher.Utils;
@@ -17,11 +16,10 @@ namespace RightClickAppLauncher.Converters
         {
             if(value is string iconPath)
             {
-                // Parameter can be used to specify small/large icon, e.g., "small" or "large"
                 bool useSmallIcon = parameter as string == "small";
                 return IconExtractor.GetIcon(iconPath, useSmallIcon);
             }
-            return IconExtractor.GetIcon(null); // Default icon if path is invalid
+            return IconExtractor.GetIcon(null);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

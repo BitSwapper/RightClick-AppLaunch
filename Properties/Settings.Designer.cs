@@ -165,5 +165,29 @@ namespace RightClickAppLauncher.Properties {
                 this["SavedLayouts"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("20")]
+        public double IconSize {
+            get {
+                return ((double)(this["IconSize"]));
+            }
+            set {
+                this["IconSize"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("10")]
+        public double IconSpacing {
+            get {
+                return ((double)(this["IconSpacing"]));
+            }
+            set {
+                this["IconSpacing"] = value;
+            }
+        }
     }
 }
