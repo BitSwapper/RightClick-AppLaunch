@@ -23,6 +23,20 @@ namespace RightClickAppLauncher.Models
             set { _executablePath = value; OnPropertyChanged(); }
         }
 
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if(_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private string _arguments;
         public string Arguments
         {

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic; // Added for List
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -53,15 +54,22 @@ namespace RightClickAppLauncher.UI
             }
         }
 
+        // --- NEW FIELDS for selection and multi-drag ---
+        private List<LauncherItem> _selectedLauncherItems = new List<LauncherItem>();
+        // Stores original positions of ALL selected items at the start of a drag
+        private Dictionary<Guid, Point> _dragStartPositionsSelectedItems = new Dictionary<Guid, Point>();
+        DateTime _lastMouseDownTime = DateTime.MinValue; // Not strictly needed if using e.ClickCount
+        DateTime _lastMouseDownTimeOnIcon = DateTime.MinValue; // Not strictly needed if using e.ClickCount
+        FrameworkElement _lastMouseDownItemVisual = null; // Not strictly needed if using e.ClickCount
+        const int DoubleClickThresholdMs = 250;
+        // ------------------------------------------------
 
-        private double GridCellSize => this.CurrentIconSize + 12 + Settings.Default.IconSpacing;
-        private const double StackPadding = 5.0;
-        private Point _mouseDragStartPoint_CanvasRelative;
-        private FrameworkElement _draggedItemVisual;
-        private LauncherItem _draggedLauncherItemModel;
-        private Point _originalItemPositionBeforeDrag;
+        private Point _mouseDragStartPoint_CanvasRelative; // Mouse position on canvas at drag start
+        private FrameworkElement _draggedItemVisual; // The specific visual element clicked to initiate drag
+        private LauncherItem _draggedLauncherItemModel; // The data item of the _draggedItemVisual (primary reference)
+        private Point _originalItemPositionBeforeDrag; // Original X,Y of _draggedLauncherItemModel (primary reference)
         private bool _isCurrentlyDragging = false;
-        private bool _leftMouseDownOnIcon = false;
+        private bool _leftMouseDownOnIcon = false; // Flag to track if mouse down originated on an icon
         private bool _isOpeningSettings = false;
         private bool _isShowingInputDialog = false;
         private readonly LauncherConfigManager _configManager;
@@ -89,8 +97,8 @@ namespace RightClickAppLauncher.UI
         [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
 
-        // Properties for dynamic sizing based on settings
-
+        private double GridCellSize => this.CurrentIconSize + 12 + Settings.Default.IconSpacing;
+        private const double StackPadding = 5.0;
 
         public LauncherMenuWindow(ObservableCollection<LauncherItem> items, Point position, LauncherConfigManager configManager)
         {
@@ -98,10 +106,12 @@ namespace RightClickAppLauncher.UI
             DataContext = this;
             _configManager = configManager;
             _dragHistory = new DragHistoryManager(ApplyItemPosition);
-            LauncherItemsOnCanvas = items ?? new ObservableCollection<LauncherItem>();
-            UpdateNoItemsMessage();
 
-            // Initialize the icon size
+            var initialItems = items ?? new ObservableCollection<LauncherItem>();
+            foreach(var item in initialItems) item.IsSelected = false; // Ensure IsSelected is false
+            LauncherItemsOnCanvas = initialItems;
+
+            UpdateNoItemsMessage();
             CurrentIconSize = Settings.Default.IconSize;
 
             if(Settings.Default.SavedLayouts == null)
@@ -109,12 +119,10 @@ namespace RightClickAppLauncher.UI
                 Settings.Default.SavedLayouts = new StringCollection();
             }
 
-            // Always use cursor position
             Point cursorPosition = GetCursorPosition();
             this.Left = cursorPosition.X;
             this.Top = cursorPosition.Y;
 
-            // Still use saved window dimensions
             try
             {
                 this.Width = Settings.Default.LauncherMenuWidth > 0 ? Settings.Default.LauncherMenuWidth : this.Width;
@@ -124,220 +132,255 @@ namespace RightClickAppLauncher.UI
             {
                 Debug.WriteLine($"SETTINGS PROPERTY NOT FOUND in constructor: {ex} - {ex.Message}. Using defaults.");
             }
-
             EnsureWindowIsOnScreen();
         }
 
-        // Update the SaveLayoutAs_Click method
-        private void SaveLayoutAs_Click(object sender, RoutedEventArgs e)
+        private void DeselectAllItems(LauncherItem exceptThis = null)
         {
-            _isShowingInputDialog = true;
-
-            InputDialog inputDialog = new InputDialog("Enter name for this layout:", "My Layout " + DateTime.Now.ToString("yyyy-MM-dd HHmm"))
-            { Owner = this };
-
-            if(inputDialog.ShowDialog() == true)
+            // ToList() creates a copy, allowing modification of _selectedLauncherItems within the loop
+            foreach(var item in _selectedLauncherItems.ToList()) // Iterate over a copy
             {
-                string layoutName = inputDialog.ResponseText.Trim();
-                if(string.IsNullOrWhiteSpace(layoutName))
+                if(item != exceptThis)
                 {
-                    MessageBox.Show("Layout name cannot be empty.", "Invalid Name", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    _isShowingInputDialog = false;
-                    return;
+                    item.IsSelected = false;
                 }
-
-                System.Collections.Generic.List<LauncherItem> currentItemsToSave = new System.Collections.Generic.List<LauncherItem>(LauncherItemsOnCanvas);
-                string currentLayoutItemsJson = JsonConvert.SerializeObject(currentItemsToSave, Formatting.Indented);
-
-                System.Collections.Generic.List<NamedLayout> allSavedLayouts = GetSavedNamedLayouts();
-
-                NamedLayout existingLayout = allSavedLayouts.FirstOrDefault(L => L.Name.Equals(layoutName, StringComparison.OrdinalIgnoreCase));
-                if(existingLayout != null)
-                {
-                    var result = MessageBox.Show($"A layout named '{layoutName}' already exists. Overwrite it?", "Confirm Overwrite", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                    if(result == MessageBoxResult.No)
-                    {
-                        _isShowingInputDialog = false;
-                        return;
-                    }
-                    existingLayout.LayoutJson = currentLayoutItemsJson;
-                    existingLayout.SavedDate = DateTime.UtcNow;
-                    existingLayout.WindowWidth = this.ActualWidth;
-                    existingLayout.WindowHeight = this.ActualHeight;
-                    existingLayout.IconSize = Settings.Default.IconSize;
-                    existingLayout.IconSpacing = Settings.Default.IconSpacing;
-                }
-                else
-                {
-                    allSavedLayouts.Add(new NamedLayout
-                    {
-                        Name = layoutName,
-                        LayoutJson = currentLayoutItemsJson,
-                        WindowWidth = this.ActualWidth,
-                        WindowHeight = this.ActualHeight,
-                        IconSize = Settings.Default.IconSize,
-                        IconSpacing = Settings.Default.IconSpacing
-                    });
-                }
-
-                PersistAllNamedLayouts(allSavedLayouts);
-                MessageBox.Show($"Layout '{layoutName}' saved with icon settings.", "Layout Saved", MessageBoxButton.OK, MessageBoxImage.Information);
             }
-
-            _isShowingInputDialog = false;
+            _selectedLauncherItems.Clear();
+            if(exceptThis != null && exceptThis.IsSelected) // If exceptThis was (re)selected, add it
+            {
+                _selectedLauncherItems.Add(exceptThis);
+            }
         }
 
-        // Update the ReloadItemsFromConfig method
-        private void ReloadItemsFromConfig(bool loadDefaultLayout = true, NamedLayout layoutToLoad = null)
+        private void ToggleItemSelected(LauncherItem item)
         {
-            Debug.WriteLine($"ReloadItemsFromConfig. LoadDefault: {loadDefaultLayout}, Specific Layout: {layoutToLoad?.Name ?? "N/A"}");
-            System.Collections.Generic.List<LauncherItem> itemsToLoad = null;
-
-            if(!loadDefaultLayout && layoutToLoad != null)
+            item.IsSelected = !item.IsSelected;
+            if(item.IsSelected)
             {
-                try
-                {
-                    if(string.IsNullOrWhiteSpace(layoutToLoad.LayoutJson))
-                    {
-                        Debug.WriteLine($"Layout '{layoutToLoad.Name}' has empty JSON. Loading default.");
-                        itemsToLoad = _configManager.LoadLauncherItems();
-                    }
-                    else
-                    {
-                        itemsToLoad = JsonConvert.DeserializeObject<System.Collections.Generic.List<LauncherItem>>(layoutToLoad.LayoutJson);
-                        Debug.WriteLine($"Loaded specific layout: {layoutToLoad.Name}");
-
-                        // Restore window dimensions if available
-                        if(layoutToLoad.WindowWidth > 0 && layoutToLoad.WindowHeight > 0)
-                        {
-                            this.Width = layoutToLoad.WindowWidth;
-                            this.Height = layoutToLoad.WindowHeight;
-                        }
-
-                        // Restore icon settings if available (check for non-zero values for backward compatibility)
-                        if(layoutToLoad.IconSize > 0)
-                        {
-                            Settings.Default.IconSize = layoutToLoad.IconSize;
-                            CurrentIconSize = layoutToLoad.IconSize;
-                        }
-
-                        if(layoutToLoad.IconSpacing >= 0) // IconSpacing can be 0, so we check for >= 0
-                        {
-                            Settings.Default.IconSpacing = layoutToLoad.IconSpacing;
-                        }
-
-                        // Save the settings so they persist
-                        Settings.Default.Save();
-
-                        // Apply the icon size to refresh the UI
-                        ApplyIconSize();
-
-                        Debug.WriteLine($"Applied icon size: {layoutToLoad.IconSize}, spacing: {layoutToLoad.IconSpacing}");
-                    }
-                }
-                catch(Exception ex)
-                {
-                    MessageBox.Show($"Error deserializing layout '{layoutToLoad.Name}': {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    itemsToLoad = _configManager.LoadLauncherItems();
-                }
+                if(!_selectedLauncherItems.Contains(item))
+                    _selectedLauncherItems.Add(item);
             }
             else
             {
-                itemsToLoad = _configManager.LoadLauncherItems();
+                _selectedLauncherItems.Remove(item);
             }
-
-            LauncherItemsOnCanvas = new ObservableCollection<LauncherItem>(itemsToLoad ?? new System.Collections.Generic.List<LauncherItem>());
-            UpdateNoItemsMessage();
-            _dragHistory.ClearHistory();
         }
 
-        // Update the GetSavedNamedLayouts method to handle backward compatibility
-        private System.Collections.Generic.List<NamedLayout> GetSavedNamedLayouts()
+        private void Icon_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if(Settings.Default.SavedLayouts == null)
+            Debug.WriteLine("Icon_PreviewMouseLeftButtonDown");
+            if(!(sender is FrameworkElement fe && fe.DataContext is LauncherItem clickedItem))
+                return;
+
+            bool ctrlPressed = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+
+            // --- Manual Double-Click Detection ---
+            bool isDoubleClick = false;
+            DateTime currentClickTime = DateTime.Now;
+            if(_lastMouseDownItemVisual == fe && // Click is on the same item
+                (currentClickTime - _lastMouseDownTimeOnIcon).TotalMilliseconds < DoubleClickThresholdMs)
             {
-                Settings.Default.SavedLayouts = new StringCollection();
-                return new System.Collections.Generic.List<NamedLayout>();
+                isDoubleClick = true;
+                // Reset for next potential double click sequence, or to prevent triple/quadruple clicks
+                // from being treated as part of the same double click.
+                _lastMouseDownTimeOnIcon = DateTime.MinValue;
+                _lastMouseDownItemVisual = null;
+            }
+            else
+            {
+                // This is a first click (or too slow for a double click, or on a different item)
+                _lastMouseDownTimeOnIcon = currentClickTime;
+                _lastMouseDownItemVisual = fe;
+            }
+            // We can still check e.ClickCount as a secondary measure or for debugging, but 'isDoubleClick' will be primary
+            // Debug.WriteLine($"WPF e.ClickCount: {e.ClickCount}, Manual isDoubleClick: {isDoubleClick}");
+
+            if(isDoubleClick)
+            {
+                Debug.WriteLine($"Double click (manual) on: {clickedItem.DisplayName}");
+                LaunchItem(clickedItem);
+                this.Close();
+                e.Handled = true;
+                return;
             }
 
-            System.Collections.Generic.List<NamedLayout> namedLayouts = new System.Collections.Generic.List<NamedLayout>();
-            foreach(string layoutEntryJson in Settings.Default.SavedLayouts)
+            // --- Single Click / Drag Start Logic (if not a double click) ---
+            _leftMouseDownOnIcon = true;
+
+            if(ctrlPressed) // Ctrl IS HELD during MouseDown
             {
-                if(string.IsNullOrWhiteSpace(layoutEntryJson)) continue;
-                try
+                ToggleItemSelected(clickedItem);
+            }
+            else // Ctrl IS NOT HELD during MouseDown
+            {
+                if(!clickedItem.IsSelected)
                 {
-                    NamedLayout namedLayout = JsonConvert.DeserializeObject<NamedLayout>(layoutEntryJson);
-                    if(namedLayout != null)
+                    DeselectAllItems();
+                    clickedItem.IsSelected = true;
+                    _selectedLauncherItems.Add(clickedItem);
+                }
+            }
+
+            if(_selectedLauncherItems.Any())
+            {
+                _draggedItemVisual = fe;
+                _draggedLauncherItemModel = clickedItem;
+
+                if(_iconCanvasInstance == null)
+                {
+                    _iconCanvasInstance = FindVisualChild<Canvas>(LauncherItemsHostControl);
+                    if(_iconCanvasInstance == null) { Debug.WriteLine("CRITICAL: IconCanvas not found!"); return; }
+                }
+                _mouseDragStartPoint_CanvasRelative = e.GetPosition(_iconCanvasInstance);
+
+                _dragStartPositionsSelectedItems.Clear();
+                foreach(var selItem in _selectedLauncherItems)
+                {
+                    _dragStartPositionsSelectedItems[selItem.Id] = new Point(selItem.X, selItem.Y);
+                }
+
+                _originalItemPositionBeforeDrag = new Point(clickedItem.X, clickedItem.Y);
+            }
+
+            e.Handled = true;
+        }
+
+        private void Icon_MouseMove(object sender, MouseEventArgs e)
+        {
+            if(!_leftMouseDownOnIcon || e.LeftButton != MouseButtonState.Pressed || !_selectedLauncherItems.Any())
+                return;
+
+            if(!_isCurrentlyDragging)
+            {
+                if(_iconCanvasInstance == null) return;
+                Point currentCanvasPos = e.GetPosition(_iconCanvasInstance);
+                if(Math.Abs(currentCanvasPos.X - _mouseDragStartPoint_CanvasRelative.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                    Math.Abs(currentCanvasPos.Y - _mouseDragStartPoint_CanvasRelative.Y) > SystemParameters.MinimumVerticalDragDistance)
+                {
+                    Debug.WriteLine("Starting group icon drag");
+                    _isCurrentlyDragging = true;
+                    _draggedItemVisual?.CaptureMouse();
+                    if(_draggedItemVisual != null) _draggedItemVisual.Cursor = Cursors.Hand;
+                }
+            }
+
+            if(_isCurrentlyDragging)
+            {
+                if(_iconCanvasInstance == null || _draggedLauncherItemModel == null) return;
+
+                Point currentMousePosOnCanvas = e.GetPosition(_iconCanvasInstance);
+
+                double primaryTargetX = _originalItemPositionBeforeDrag.X + (currentMousePosOnCanvas.X - _mouseDragStartPoint_CanvasRelative.X);
+                double primaryTargetY = _originalItemPositionBeforeDrag.Y + (currentMousePosOnCanvas.Y - _mouseDragStartPoint_CanvasRelative.Y);
+
+                bool shiftPressed = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
+
+                if(shiftPressed)
+                {
+                    double fullGridStep = this.GridCellSize;
+                    if(fullGridStep > 0)
                     {
-                        // For backward compatibility: if icon settings are missing (0), use current defaults
-                        if(namedLayout.IconSize <= 0)
-                            namedLayout.IconSize = Settings.Default.IconSize;
-
-                        // IconSpacing can be 0, so we only check for negative values
-                        if(namedLayout.IconSpacing < 0)
-                            namedLayout.IconSpacing = Settings.Default.IconSpacing;
-
-                        namedLayouts.Add(namedLayout);
+                        double snapStep = fullGridStep / 2.0;
+                        if(snapStep > 0)
+                        {
+                            const double stackPaddingValue = StackPadding;
+                            primaryTargetX = stackPaddingValue + Math.Round((primaryTargetX - stackPaddingValue) / snapStep) * snapStep;
+                            primaryTargetY = stackPaddingValue + Math.Round((primaryTargetY - stackPaddingValue) / snapStep) * snapStep;
+                        }
                     }
                 }
-                catch(Exception ex)
+
+                double actualDeltaX = primaryTargetX - _originalItemPositionBeforeDrag.X;
+                double actualDeltaY = primaryTargetY - _originalItemPositionBeforeDrag.Y;
+
+                foreach(var selectedItem in _selectedLauncherItems)
                 {
-                    Debug.WriteLine($"Error deserializing a NamedLayout entry: {ex.Message} - JSON: {layoutEntryJson}");
+                    if(!_dragStartPositionsSelectedItems.TryGetValue(selectedItem.Id, out Point originalPosOfThisItem))
+                    {
+                        Debug.WriteLine($"ERROR: Could not find original position for {selectedItem.DisplayName} during drag.");
+                        originalPosOfThisItem = new Point(selectedItem.X - actualDeltaX, selectedItem.Y - actualDeltaY); // Try to reconstruct
+                    }
+
+                    double newX = originalPosOfThisItem.X + actualDeltaX;
+                    double newY = originalPosOfThisItem.Y + actualDeltaY;
+
+                    double itemWidth = this.CurrentIconSize + 12;
+                    double itemHeight = this.CurrentIconSize + 12;
+
+                    newX = Math.Max(0, Math.Min(newX, _iconCanvasInstance.ActualWidth - itemWidth));
+                    newY = Math.Max(0, Math.Min(newY, _iconCanvasInstance.ActualHeight - itemHeight));
+
+                    if(shiftPressed && StackPadding > 0)
+                    {
+                        newX = Math.Max(StackPadding, newX);
+                        newY = Math.Max(StackPadding, newY);
+                    }
+
+                    selectedItem.X = newX;
+                    selectedItem.Y = newY;
                 }
             }
-            return namedLayouts;
         }
 
-        private void ApplyIconSize()
+        private void Icon_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            CurrentIconSize = Settings.Default.IconSize;
+            Debug.WriteLine($"IconUp. Dragging: {_isCurrentlyDragging}, MouseDownOnIcon: {_leftMouseDownOnIcon}");
 
-            // Force all items to update their bindings
-            if(LauncherItemsOnCanvas != null)
+            if(_leftMouseDownOnIcon)
             {
-                foreach(var item in LauncherItemsOnCanvas)
+                if(_isCurrentlyDragging)
                 {
-                    item.OnPropertyChanged("IconPath"); // Trigger rebinding
+                    Debug.WriteLine("Drag ended for selected items.");
+                    foreach(var item in _selectedLauncherItems)
+                    {
+                        if(_dragStartPositionsSelectedItems.TryGetValue(item.Id, out Point originalPos))
+                        {
+                            if(Math.Abs(item.X - originalPos.X) > 0.1 || Math.Abs(item.Y - originalPos.Y) > 0.1)
+                            {
+                                _dragHistory.RecordDrag(item, originalPos.X, originalPos.Y);
+                                Debug.WriteLine($"Drag recorded for: {item.DisplayName}");
+                            }
+                        }
+                    }
+                    _draggedItemVisual?.ReleaseMouseCapture();
+                    if(_draggedItemVisual != null) _draggedItemVisual.Cursor = null;
                 }
             }
 
-            // Force the entire window to update layout
-            this.UpdateLayout();
-            this.InvalidateVisual();
+            _isCurrentlyDragging = false;
+            _leftMouseDownOnIcon = false;
+            _dragStartPositionsSelectedItems.Clear();
+            // Do not null out _draggedItemVisual or _draggedLauncherItemModel here, as context menus might rely on them.
+            // e.Handled should have been set in PreviewMouseLeftButtonDown if the icon was clicked.
         }
 
-        // Update the SettingsWindow_Closed method
-        private void SettingsWindow_Closed(object sender, EventArgs e)
+        private void MenuBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            _isOpeningSettings = false;
+            if(e.Handled)
+            {
+                Debug.WriteLine("MenuBorder LBtnDown: Handled by icon.");
+                return;
+            }
 
-            // Apply the new icon size
-            ApplyIconSize();
+            Debug.WriteLine("MenuBorder LBtnDown for window drag OR deselect all.");
+            DeselectAllItems();
 
-            ReloadItemsFromConfig(true);
-
-            if(sender is SettingsWindow sw) sw.Closed -= SettingsWindow_Closed;
-            this.Show();
-            this.Activate();
-            this.Focus();
+            if(e.ButtonState == MouseButtonState.Pressed)
+            {
+                try { this.DragMove(); } catch(InvalidOperationException) { /* Can happen */ }
+            }
         }
 
-        // Remove RefreshIconSizes method since it's now redundant with ApplyIconSize
-
-        // Update Window_Loaded method
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             _iconCanvasInstance = FindVisualChild<Canvas>(LauncherItemsHostControl);
             if(_iconCanvasInstance == null) Debug.WriteLine("WARNING: IconCanvas instance not found!");
 
-            // Apply icon sizes on load
             ApplyIconSize();
-
             this.Focus();
             this.Activate();
             if(ShowNoItemsMessage) MenuBorder.Focus();
         }
-
 
         private Point GetCursorPosition()
         {
@@ -383,6 +426,7 @@ namespace RightClickAppLauncher.UI
         private bool IsAnyContextMenuOpen()
         {
             if(BackgroundContextMenu.IsOpen) return true;
+            if(LauncherItemsHostControl == null) return false;
             foreach(var itemData in LauncherItemsHostControl.Items)
             {
                 var c = LauncherItemsHostControl.ItemContainerGenerator.ContainerFromItem(itemData) as ContentPresenter;
@@ -403,6 +447,7 @@ namespace RightClickAppLauncher.UI
 
         private void Window_Closing(object sender, CancelEventArgs e)
         {
+            DeselectAllItems();
             SaveCurrentLayoutAsDefault();
             try
             {
@@ -433,6 +478,14 @@ namespace RightClickAppLauncher.UI
             bool ctrl = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
             if(ctrl && e.Key == Key.Z) { _dragHistory.Undo(FindItemById); e.Handled = true; }
             else if(ctrl && e.Key == Key.Y) { _dragHistory.Redo(FindItemById); e.Handled = true; }
+            else if(ctrl && e.Key == Key.A) // Ctrl+A to select all
+            {
+                foreach(var item in LauncherItemsOnCanvas)
+                {
+                    if(!item.IsSelected) ToggleItemSelected(item); // Use Toggle to add to _selectedLauncherItems
+                }
+                e.Handled = true;
+            }
         }
 
         private void LaunchItem(LauncherItem item)
@@ -443,7 +496,6 @@ namespace RightClickAppLauncher.UI
                 if(item?.ExecutablePath != "NO_ACTION") MessageBox.Show("Path not configured.", "Error");
                 return;
             }
-
             try
             {
                 var psi = new ProcessStartInfo
@@ -452,7 +504,6 @@ namespace RightClickAppLauncher.UI
                     Arguments = Environment.ExpandEnvironmentVariables(item.Arguments ?? ""),
                     UseShellExecute = true
                 };
-
                 if(!string.IsNullOrWhiteSpace(item.WorkingDirectory))
                 {
                     string wd = Environment.ExpandEnvironmentVariables(item.WorkingDirectory);
@@ -468,7 +519,6 @@ namespace RightClickAppLauncher.UI
                     string ed = Path.GetDirectoryName(psi.FileName);
                     if(Directory.Exists(ed)) psi.WorkingDirectory = ed;
                 }
-
                 Process.Start(psi);
                 Debug.WriteLine($"Started: {item.DisplayName}");
             }
@@ -479,189 +529,18 @@ namespace RightClickAppLauncher.UI
             }
         }
 
-        private void Icon_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            Debug.WriteLine("Icon_PreviewMouseLeftButtonDown");
-            if(sender is FrameworkElement fe && fe.DataContext is LauncherItem li)
-            {
-                _draggedItemVisual = fe;
-                _draggedLauncherItemModel = li;
-                if(_iconCanvasInstance == null)
-                {
-                    _iconCanvasInstance = FindVisualChild<Canvas>(LauncherItemsHostControl);
-                    if(_iconCanvasInstance == null)
-                    {
-                        Debug.WriteLine("CRITICAL: IconCanvas not found!");
-                        return;
-                    }
-                }
-                _mouseDragStartPoint_CanvasRelative = e.GetPosition(_iconCanvasInstance);
-                _originalItemPositionBeforeDrag = new Point(li.X, li.Y);
-                _leftMouseDownOnIcon = true;
-                e.Handled = true;
-            }
-        }
-
-        private void Icon_MouseMove(object sender, MouseEventArgs e)
-        {
-            if(_leftMouseDownOnIcon && e.LeftButton == MouseButtonState.Pressed)
-            {
-                if(!_isCurrentlyDragging)
-                {
-                    if(_iconCanvasInstance == null) return;
-                    Point cPos = e.GetPosition(_iconCanvasInstance);
-                    if(Math.Abs(cPos.X - _mouseDragStartPoint_CanvasRelative.X) > SystemParameters.MinimumHorizontalDragDistance ||
-                       Math.Abs(cPos.Y - _mouseDragStartPoint_CanvasRelative.Y) > SystemParameters.MinimumVerticalDragDistance)
-                    {
-                        Debug.WriteLine("Starting icon drag");
-                        _isCurrentlyDragging = true;
-                        _draggedItemVisual?.CaptureMouse();
-                        if(_draggedItemVisual != null) _draggedItemVisual.Cursor = Cursors.Hand;
-                    }
-                }
-
-                if(_isCurrentlyDragging)
-                {
-                    if(_iconCanvasInstance == null || _draggedLauncherItemModel == null || _draggedItemVisual == null) return;
-
-                    Point cMousePos = e.GetPosition(_iconCanvasInstance);
-                    double oX = cMousePos.X - _mouseDragStartPoint_CanvasRelative.X;
-                    double oY = cMousePos.Y - _mouseDragStartPoint_CanvasRelative.Y;
-                    double nX = _originalItemPositionBeforeDrag.X + oX;
-                    double nY = _originalItemPositionBeforeDrag.Y + oY;
-
-                    bool shiftPressed = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
-
-                    if(shiftPressed)
-                    {
-                        double fullGridStep = this.GridCellSize;
-                        if(fullGridStep > 0)
-                        {
-                            // Use half the grid step for finer snapping
-                            double snapStep = fullGridStep / 2.0;
-
-                            // Ensure snapStep is still positive (it should be if fullGridStep is)
-                            if(snapStep > 0)
-                            {
-                                const double stackPaddingValue = StackPadding;
-
-                                nX = stackPaddingValue + Math.Round((nX - stackPaddingValue) / snapStep) * snapStep;
-                                nY = stackPaddingValue + Math.Round((nY - stackPaddingValue) / snapStep) * snapStep;
-                            }
-                        }
-                    }
-
-                    double iW = _draggedItemVisual.ActualWidth;
-                    double iH = _draggedItemVisual.ActualHeight;
-
-                    // Fallback for ActualWidth/Height if not yet rendered
-                    if(double.IsNaN(iW) || iW <= 0) iW = this.CurrentIconSize + 12;
-                    if(double.IsNaN(iH) || iH <= 0) iH = this.CurrentIconSize + 12;
-
-                    // Ensure snapped/dragged position is within canvas bounds
-                    nX = Math.Max(0, Math.Min(nX, _iconCanvasInstance.ActualWidth - iW));
-                    nY = Math.Max(0, Math.Min(nY, _iconCanvasInstance.ActualHeight - iH));
-
-                    // Ensure that if StackPadding was used for snapping, the position is not negative.
-                    // This ensures the first snap point aligns with StackPadding if applicable.
-                    if(shiftPressed && StackPadding > 0)
-                    {
-                        const double stackPaddingValue = StackPadding;
-
-                        // Check if the calculated nX/nY is less than StackPadding but positive.
-                        // If so, and if StackPadding is a valid snap target (or the first one), adjust.
-                        // This handles cases where a snap calculation might result in a value like 2.0 when StackPadding is 5.0.
-                        // The Rounding logic with stackPaddingValue should generally handle this, but this is a safeguard.
-                        if(nX < stackPaddingValue && nX > 0) nX = stackPaddingValue; // Or find the closest snap point >= StackPadding
-                        if(nY < stackPaddingValue && nY > 0) nY = stackPaddingValue; // Or find the closest snap point >= StackPadding
-
-                        // More robust way to ensure it's at least StackPadding, while respecting snap grid
-                        // If nX after snapping is less than stackPaddingValue, it should be forced to stackPaddingValue
-                        // (assuming stackPaddingValue itself is a valid start for the grid).
-                        nX = Math.Max(stackPaddingValue, nX);
-                        nY = Math.Max(stackPaddingValue, nY);
-                    }
-
-
-                    _draggedLauncherItemModel.X = nX;
-                    _draggedLauncherItemModel.Y = nY;
-                }
-            }
-        }
-
-        private void Icon_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            Debug.WriteLine($"IconUp. Dragging: {_isCurrentlyDragging}, MouseDownOnIcon: {_leftMouseDownOnIcon}");
-            bool wasDragging = _isCurrentlyDragging;
-            LauncherItem itemClick = null;
-            if(_leftMouseDownOnIcon && sender is FrameworkElement fe)
-            {
-                itemClick = fe.DataContext as LauncherItem;
-                if(_isCurrentlyDragging)
-                {
-                    if(_draggedLauncherItemModel != null && _draggedItemVisual != null)
-                    {
-                        if(Math.Abs(_draggedLauncherItemModel.X - _originalItemPositionBeforeDrag.X) > 0.1 ||
-                           Math.Abs(_draggedLauncherItemModel.Y - _originalItemPositionBeforeDrag.Y) > 0.1)
-                        {
-                            _dragHistory.RecordDrag(_draggedLauncherItemModel, _originalItemPositionBeforeDrag.X, _originalItemPositionBeforeDrag.Y);
-                            Debug.WriteLine($"Drag recorded: {_draggedLauncherItemModel.DisplayName}");
-                        }
-                    }
-                    _draggedItemVisual?.ReleaseMouseCapture();
-                    if(_draggedItemVisual != null) _draggedItemVisual.Cursor = null;
-                }
-            }
-            _isCurrentlyDragging = false;
-            bool wasLMD = _leftMouseDownOnIcon;
-            _leftMouseDownOnIcon = false;
-            _draggedItemVisual = null;
-            _draggedLauncherItemModel = null;
-            if(wasLMD && !wasDragging && itemClick != null)
-            {
-                Debug.WriteLine($"Single click: {itemClick.DisplayName}");
-                LaunchItem(itemClick);
-                this.Close();
-            }
-        }
-
         private void OptionsButton_Click(object sender, RoutedEventArgs e) => OpenSettingsWindow();
 
         private void OpenSettingsWindow()
         {
             _isOpeningSettings = true;
+            DeselectAllItems();
             SaveCurrentLayoutAsDefault();
             Debug.WriteLine("Saved current layout before opening settings.");
             var s = new SettingsWindow { Owner = this };
             s.Closed += SettingsWindow_Closed;
             this.Hide();
             s.ShowDialog();
-        }
-
-
-        private void RefreshIconSizes()
-        {
-            // Force the ItemsControl to refresh its template bindings
-            if(LauncherItemsHostControl != null)
-            {
-                LauncherItemsHostControl.UpdateLayout();
-                LauncherItemsHostControl.Items.Refresh();
-            }
-
-            // Force layout updates
-            this.UpdateLayout();
-            InvalidateVisual();
-        }
-
-
-        private void MenuBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if(e.Handled) { Debug.WriteLine("MenuBorder LBtnDown: Handled by icon."); return; }
-            Debug.WriteLine("MenuBorder LBtnDown for window drag");
-            if(e.ButtonState == MouseButtonState.Pressed)
-            {
-                try { this.DragMove(); } catch(InvalidOperationException) { }
-            }
         }
 
         private void ResizeDragDelta(object sender, DragDeltaEventArgs e)
@@ -676,10 +555,28 @@ namespace RightClickAppLauncher.UI
             Debug.WriteLine("IconBorder_ContextMenuOpening");
             if(sender is FrameworkElement fe && fe.DataContext is LauncherItem item)
             {
+                // Ensure the right-clicked item is selected
+                if(!item.IsSelected)
+                {
+                    DeselectAllItems();
+                    ToggleItemSelected(item); // Select only this item
+                }
+
                 if(fe.ContextMenu != null)
                 {
                     fe.ContextMenu.DataContext = item;
-                    Debug.WriteLine($"CtxMenu DC set: {item.DisplayName}");
+                    // Adjust context menu items if multiple items are selected
+                    bool multipleSelected = _selectedLauncherItems.Count > 1;
+                    foreach(var menuItemBase in fe.ContextMenu.Items.OfType<MenuItem>())
+                    {
+                        // Example: Disable "Edit Settings" or "File Properties" if multiple are selected
+                        string header = menuItemBase.Header as string;
+                        if(header == "Edit Launcher Settings..." || header == "File Properties..." || header == "Open File Location")
+                        {
+                            menuItemBase.IsEnabled = !multipleSelected;
+                        }
+                    }
+                    Debug.WriteLine($"CtxMenu DC set: {item.DisplayName}, MultiSelected: {multipleSelected}");
                 }
                 else
                 {
@@ -697,14 +594,12 @@ namespace RightClickAppLauncher.UI
         private void IconBorder_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
             Debug.WriteLine("IconBorder_PreviewMouseRightButtonUp");
-            if(e.LeftButton == MouseButtonState.Pressed && _leftMouseDownOnIcon)
-            {
-                Debug.WriteLine("Ctx skipped: LBtn down.");
-                return;
-            }
+            // No special handling needed here now, ContextMenuOpening handles selection.
+            // Prevent context menu if dragging was in progress (though unlikely for right button)
             if(_isCurrentlyDragging)
             {
                 Debug.WriteLine("Ctx skipped: dragging.");
+                e.Handled = true; // Prevent context menu if a drag was just completed.
                 return;
             }
         }
@@ -734,16 +629,19 @@ namespace RightClickAppLauncher.UI
         private void IconContextMenu_Launch_Click(object sender, RoutedEventArgs e)
         {
             Debug.WriteLine("CtxMenuLaunch");
-            var i = GetLauncherItemFromContextMenu(sender);
-            if(i != null) { LaunchItem(i); Close(); }
-            else Debug.WriteLine("LaunchClick: Null item");
+            foreach(var itemToLaunch in _selectedLauncherItems.ToList()) // ToList in case collection changes
+            {
+                LaunchItem(itemToLaunch);
+            }
+            if(_selectedLauncherItems.Any()) Close();
+            else Debug.WriteLine("LaunchClick: No items were selected for launch via context menu.");
         }
 
         private void IconContextMenu_OpenFileLocation_Click(object sender, RoutedEventArgs e)
         {
             Debug.WriteLine("CtxMenuOpenLocation");
-            var item = GetLauncherItemFromContextMenu(sender);
-            if(item != null && !string.IsNullOrWhiteSpace(item.ExecutablePath))
+            var item = GetLauncherItemFromContextMenu(sender); // This should be the primary item
+            if(item != null && !string.IsNullOrWhiteSpace(item.ExecutablePath) && _selectedLauncherItems.Count <= 1) // Only if one item is selected
             {
                 try
                 {
@@ -759,18 +657,16 @@ namespace RightClickAppLauncher.UI
                 }
                 catch(Exception ex) { MessageBox.Show($"Err: {ex.Message}", "Error"); }
             }
-            else Debug.WriteLine("OpenLocationClick: Null item/path");
+            else Debug.WriteLine("OpenLocationClick: Null item/path or multiple items selected.");
         }
 
         private void IconContextMenu_EditSettings_Click(object sender, RoutedEventArgs e)
         {
             Debug.WriteLine("CtxMenuEditSettings");
-            var i = GetLauncherItemFromContextMenu(sender);
-            if(i != null)
+            var i = GetLauncherItemFromContextMenu(sender); // Primary item
+            if(i != null && _selectedLauncherItems.Count <= 1) // Only if one item is selected
             {
                 _isOpeningSettings = true;
-
-                // Use the existing LauncherItemEditorWindow which now properly preserves position
                 var ed = new LauncherItemEditorWindow(i) { Owner = this };
                 if(ed.ShowDialog() == true)
                 {
@@ -778,34 +674,36 @@ namespace RightClickAppLauncher.UI
                     int idx = oI != null ? LauncherItemsOnCanvas.IndexOf(oI) : -1;
                     if(idx != -1)
                     {
-                        // The editor now preserves position internally, but let's be extra safe
                         if(ed.Item.X == 0 && ed.Item.Y == 0 && (oI.X != 0 || oI.Y != 0))
                         {
-                            // If position was reset to 0,0 (which shouldn't happen now), restore original
                             ed.Item.X = oI.X;
                             ed.Item.Y = oI.Y;
                         }
                         LauncherItemsOnCanvas[idx] = ed.Item;
+                        ed.Item.IsSelected = true; // Ensure it remains selected visually after edit
+                        _selectedLauncherItems.Remove(i); // Remove old instance
+                        _selectedLauncherItems.Add(ed.Item); // Add new instance
                         SaveCurrentLayoutAsDefault();
-                        Debug.WriteLine($"EditSettings updated: {ed.Item.DisplayName} at position ({ed.Item.X}, {ed.Item.Y})");
+                        Debug.WriteLine($"EditSettings updated: {ed.Item.DisplayName}");
                     }
                     else Debug.WriteLine($"EditSettings: Cannot find original {i.DisplayName}");
                 }
                 _isOpeningSettings = false;
                 Focus();
             }
-            else Debug.WriteLine("EditSettingsClick: Null item");
+            else Debug.WriteLine("EditSettingsClick: Null item or multiple items selected.");
         }
 
         private void IconContextMenu_FileProperties_Click(object sender, RoutedEventArgs e)
         {
             Debug.WriteLine("CtxMenuFileProps");
-            var i = GetLauncherItemFromContextMenu(sender);
-            if(i != null && !string.IsNullOrWhiteSpace(i.ExecutablePath))
+            var i = GetLauncherItemFromContextMenu(sender); // Primary item
+            if(i != null && !string.IsNullOrWhiteSpace(i.ExecutablePath) && _selectedLauncherItems.Count <= 1) // Only if one item selected
             {
                 string fp = Environment.ExpandEnvironmentVariables(i.ExecutablePath);
                 if(File.Exists(fp) || Directory.Exists(fp))
                 {
+                    // ... (SHELLEXECUTEINFO logic) ...
                     try
                     {
                         SHELLEXECUTEINFO sei = new SHELLEXECUTEINFO
@@ -833,52 +731,208 @@ namespace RightClickAppLauncher.UI
                 }
                 else MessageBox.Show($"Not found: {fp}", "Error");
             }
-            else Debug.WriteLine("FilePropsClick: Null item/path");
+            else Debug.WriteLine("FilePropsClick: Null item/path or multiple items selected.");
         }
 
         private void IconContextMenu_Remove_Click(object sender, RoutedEventArgs e)
         {
             Debug.WriteLine("CtxMenuRemove");
+            _isShowingInputDialog = true; // Prevent window close during message box
 
-            // Set flag to prevent window from closing
-            _isShowingInputDialog = true;
-
-            var i = GetLauncherItemFromContextMenu(sender);
-            if(i != null)
+            if(!_selectedLauncherItems.Any())
             {
-                var result = MessageBox.Show($"Remove '{i.DisplayName}'?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if(result == MessageBoxResult.Yes)
-                {
-                    LauncherItemsOnCanvas.Remove(i);
-                    UpdateNoItemsMessage();
-                    _dragHistory.ClearHistory();
-                    SaveCurrentLayoutAsDefault();
-                    Debug.WriteLine($"Removed: {i.DisplayName}");
+                Debug.WriteLine("RemoveClick: No items selected.");
+                _isShowingInputDialog = false;
+                return;
+            }
 
-                    // Force the UI to refresh if needed
-                    if(LauncherItemsHostControl != null)
+            string message = _selectedLauncherItems.Count == 1
+                ? $"Remove '{_selectedLauncherItems.First().DisplayName}'?"
+                : $"Remove {_selectedLauncherItems.Count} selected items?";
+
+            var result = MessageBox.Show(message, "Confirm Removal", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if(result == MessageBoxResult.Yes)
+            {
+                foreach(var itemToRemove in _selectedLauncherItems.ToList()) // Iterate over a copy
+                {
+                    LauncherItemsOnCanvas.Remove(itemToRemove);
+                    Debug.WriteLine($"Removed: {itemToRemove.DisplayName}");
+                }
+                _selectedLauncherItems.Clear(); // Clear the selection list
+                UpdateNoItemsMessage();
+                _dragHistory.ClearHistory();
+                SaveCurrentLayoutAsDefault();
+                if(LauncherItemsHostControl != null) LauncherItemsHostControl.Items.Refresh();
+            }
+            _isShowingInputDialog = false;
+            this.Activate();
+            this.Focus();
+        }
+
+        private void SaveLayoutAs_Click(object sender, RoutedEventArgs e)
+        {
+            DeselectAllItems();
+            _isShowingInputDialog = true;
+            InputDialog inputDialog = new InputDialog("Enter name for this layout:", "My Layout " + DateTime.Now.ToString("yyyy-MM-dd HHmm"))
+            { Owner = this };
+            if(inputDialog.ShowDialog() == true)
+            {
+                // ... (rest of SaveLayoutAs_Click logic) ...
+                string layoutName = inputDialog.ResponseText.Trim();
+                if(string.IsNullOrWhiteSpace(layoutName))
+                {
+                    MessageBox.Show("Layout name cannot be empty.", "Invalid Name", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    _isShowingInputDialog = false;
+                    return;
+                }
+                System.Collections.Generic.List<LauncherItem> currentItemsToSave = new System.Collections.Generic.List<LauncherItem>(LauncherItemsOnCanvas);
+                string currentLayoutItemsJson = JsonConvert.SerializeObject(currentItemsToSave, Formatting.Indented);
+                System.Collections.Generic.List<NamedLayout> allSavedLayouts = GetSavedNamedLayouts();
+                NamedLayout existingLayout = allSavedLayouts.FirstOrDefault(L => L.Name.Equals(layoutName, StringComparison.OrdinalIgnoreCase));
+                if(existingLayout != null)
+                {
+                    var res = MessageBox.Show($"A layout named '{layoutName}' already exists. Overwrite it?", "Confirm Overwrite", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if(res == MessageBoxResult.No)
                     {
-                        LauncherItemsHostControl.Items.Refresh();
+                        _isShowingInputDialog = false;
+                        return;
                     }
+                    existingLayout.LayoutJson = currentLayoutItemsJson;
+                    existingLayout.SavedDate = DateTime.UtcNow;
+                    existingLayout.WindowWidth = this.ActualWidth;
+                    existingLayout.WindowHeight = this.ActualHeight;
+                    existingLayout.IconSize = Settings.Default.IconSize;
+                    existingLayout.IconSpacing = Settings.Default.IconSpacing;
+                }
+                else
+                {
+                    allSavedLayouts.Add(new NamedLayout
+                    {
+                        Name = layoutName,
+                        LayoutJson = currentLayoutItemsJson,
+                        WindowWidth = this.ActualWidth,
+                        WindowHeight = this.ActualHeight,
+                        IconSize = Settings.Default.IconSize,
+                        IconSpacing = Settings.Default.IconSpacing
+                    });
+                }
+                PersistAllNamedLayouts(allSavedLayouts);
+                MessageBox.Show($"Layout '{layoutName}' saved with icon settings.", "Layout Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            _isShowingInputDialog = false;
+        }
+
+        private void ReloadItemsFromConfig(bool loadDefaultLayout = true, NamedLayout layoutToLoad = null)
+        {
+            DeselectAllItems();
+            Debug.WriteLine($"ReloadItemsFromConfig. LoadDefault: {loadDefaultLayout}, Specific Layout: {layoutToLoad?.Name ?? "N/A"}");
+            System.Collections.Generic.List<LauncherItem> itemsToLoad = null;
+            if(!loadDefaultLayout && layoutToLoad != null)
+            {
+                // ... (logic to load specific layout) ...
+                try
+                {
+                    if(string.IsNullOrWhiteSpace(layoutToLoad.LayoutJson))
+                    {
+                        Debug.WriteLine($"Layout '{layoutToLoad.Name}' has empty JSON. Loading default.");
+                        itemsToLoad = _configManager.LoadLauncherItems();
+                    }
+                    else
+                    {
+                        itemsToLoad = JsonConvert.DeserializeObject<System.Collections.Generic.List<LauncherItem>>(layoutToLoad.LayoutJson);
+                        Debug.WriteLine($"Loaded specific layout: {layoutToLoad.Name}");
+
+                        if(layoutToLoad.WindowWidth > 0 && layoutToLoad.WindowHeight > 0)
+                        {
+                            this.Width = layoutToLoad.WindowWidth;
+                            this.Height = layoutToLoad.WindowHeight;
+                        }
+                        if(layoutToLoad.IconSize > 0) Settings.Default.IconSize = layoutToLoad.IconSize;
+                        if(layoutToLoad.IconSpacing >= 0) Settings.Default.IconSpacing = layoutToLoad.IconSpacing;
+
+                        Settings.Default.Save();
+                        ApplyIconSize(); // This will also update CurrentIconSize
+                        Debug.WriteLine($"Applied icon size: {Settings.Default.IconSize}, spacing: {Settings.Default.IconSpacing}");
+                    }
+                }
+                catch(Exception ex)
+                {
+                    MessageBox.Show($"Error deserializing layout '{layoutToLoad.Name}': {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    itemsToLoad = _configManager.LoadLauncherItems(); // Fallback
                 }
             }
             else
             {
-                Debug.WriteLine("RemoveClick: Null item");
+                itemsToLoad = _configManager.LoadLauncherItems();
+                ApplyIconSize(); // Ensure icon size is applied for default load too
             }
 
-            // Reset flag and ensure window stays active
-            _isShowingInputDialog = false;
+            // Set IsSelected to false for all items being loaded
+            if(itemsToLoad != null)
+            {
+                foreach(var item in itemsToLoad) item.IsSelected = false;
+            }
+
+            LauncherItemsOnCanvas = new ObservableCollection<LauncherItem>(itemsToLoad ?? new System.Collections.Generic.List<LauncherItem>());
+            UpdateNoItemsMessage();
+            _dragHistory.ClearHistory();
+        }
+
+        private System.Collections.Generic.List<NamedLayout> GetSavedNamedLayouts()
+        {
+            if(Settings.Default.SavedLayouts == null)
+            {
+                Settings.Default.SavedLayouts = new StringCollection();
+                return new System.Collections.Generic.List<NamedLayout>();
+            }
+            System.Collections.Generic.List<NamedLayout> namedLayouts = new System.Collections.Generic.List<NamedLayout>();
+            foreach(string layoutEntryJson in Settings.Default.SavedLayouts)
+            {
+                // ... (logic for GetSavedNamedLayouts) ...
+                if(string.IsNullOrWhiteSpace(layoutEntryJson)) continue;
+                try
+                {
+                    NamedLayout namedLayout = JsonConvert.DeserializeObject<NamedLayout>(layoutEntryJson);
+                    if(namedLayout != null)
+                    {
+                        if(namedLayout.IconSize <= 0) namedLayout.IconSize = Settings.Default.IconSize;
+                        if(namedLayout.IconSpacing < 0) namedLayout.IconSpacing = Settings.Default.IconSpacing;
+                        namedLayouts.Add(namedLayout);
+                    }
+                }
+                catch(Exception ex)
+                {
+                    Debug.WriteLine($"Error deserializing a NamedLayout entry: {ex.Message} - JSON: {layoutEntryJson}");
+                }
+            }
+            return namedLayouts;
+        }
+
+        private void ApplyIconSize()
+        {
+            CurrentIconSize = Settings.Default.IconSize; // Update the bound property
+            if(LauncherItemsOnCanvas != null)
+            {
+                foreach(var item in LauncherItemsOnCanvas) item.OnPropertyChanged("IconPath");
+            }
+            this.UpdateLayout();
+            this.InvalidateVisual();
+        }
+
+        private void SettingsWindow_Closed(object sender, EventArgs e)
+        {
+            _isOpeningSettings = false;
+            ApplyIconSize(); // Apply new icon size
+            ReloadItemsFromConfig(true); // Reload default layout which uses current settings
+            if(sender is SettingsWindow sw) sw.Closed -= SettingsWindow_Closed;
+            this.Show();
             this.Activate();
             this.Focus();
         }
 
         private void PersistAllNamedLayouts(System.Collections.Generic.List<NamedLayout> layoutsToSave)
         {
-            if(Settings.Default.SavedLayouts == null)
-            {
-                Settings.Default.SavedLayouts = new StringCollection();
-            }
+            if(Settings.Default.SavedLayouts == null) Settings.Default.SavedLayouts = new StringCollection();
             Settings.Default.SavedLayouts.Clear();
             foreach(var namedLayout in layoutsToSave)
             {
@@ -887,10 +941,7 @@ namespace RightClickAppLauncher.UI
                     string layoutEntryJson = JsonConvert.SerializeObject(namedLayout, Formatting.None);
                     Settings.Default.SavedLayouts.Add(layoutEntryJson);
                 }
-                catch(Exception ex)
-                {
-                    Debug.WriteLine($"Error serializing NamedLayout '{namedLayout.Name}': {ex.Message}");
-                }
+                catch(Exception ex) { Debug.WriteLine($"Error serializing NamedLayout '{namedLayout.Name}': {ex.Message}"); }
             }
             Settings.Default.Save();
         }
@@ -901,7 +952,6 @@ namespace RightClickAppLauncher.UI
         {
             LoadLayoutMenuItemHost.Items.Clear();
             System.Collections.Generic.List<NamedLayout> savedLayouts = GetSavedNamedLayouts();
-
             if(!savedLayouts.Any())
             {
                 MenuItem noLayoutsItem = new MenuItem { Header = "(No saved layouts)", IsEnabled = false };
@@ -930,30 +980,25 @@ namespace RightClickAppLauncher.UI
 
         private void ManageLayouts_Click(object sender, RoutedEventArgs e)
         {
+            DeselectAllItems();
             _isShowingInputDialog = true;
-
             System.Collections.Generic.List<NamedLayout> savedLayouts = GetSavedNamedLayouts();
+            // ... (rest of ManageLayouts_Click logic) ...
             if(!savedLayouts.Any())
             {
                 MessageBox.Show("No layouts have been saved yet.", "Manage Layouts", MessageBoxButton.OK, MessageBoxImage.Information);
                 _isShowingInputDialog = false;
                 return;
             }
-
             var manageWindow = new ManageLayoutsWindow(savedLayouts) { Owner = this };
             var result = manageWindow.ShowDialog();
-
             if(result == true)
             {
-                // Either layouts were modified or user wants to load a layout
                 if(manageWindow.LayoutsModified)
                 {
-                    // Save the updated layouts
                     PersistAllNamedLayouts(manageWindow.GetUpdatedLayouts());
                     MessageBox.Show("Layout changes saved.", "Manage Layouts", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
-
-                // Check if user wanted to load a specific layout
                 if(manageWindow.SelectedLayoutToLoad != null)
                 {
                     ReloadItemsFromConfig(false, manageWindow.SelectedLayoutToLoad);
@@ -961,22 +1006,15 @@ namespace RightClickAppLauncher.UI
             }
             else if(manageWindow.LayoutsModified)
             {
-                // User closed but made changes
-                var saveResult = MessageBox.Show("Save changes to layouts?", "Save Changes",
-                                           MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if(saveResult == MessageBoxResult.Yes)
-                {
-                    PersistAllNamedLayouts(manageWindow.GetUpdatedLayouts());
-                }
+                var saveResult = MessageBox.Show("Save changes to layouts?", "Save Changes", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if(saveResult == MessageBoxResult.Yes) PersistAllNamedLayouts(manageWindow.GetUpdatedLayouts());
             }
-
             _isShowingInputDialog = false;
         }
 
-        private void BackgroundContextMenu_AddItem_Click(object sender, RoutedEventArgs e) => OpenSettingsWindow();
-
         private void Organize_AlignToGrid_Click(object sender, RoutedEventArgs e)
         {
+            DeselectAllItems();
             Debug.WriteLine("Organize_AlignToGrid_Click");
             if(_iconCanvasInstance == null || !LauncherItemsOnCanvas.Any()) return;
 
@@ -990,7 +1028,7 @@ namespace RightClickAppLauncher.UI
                 item.X = currentX;
                 item.Y = currentY;
                 currentX += cellSize;
-                if(currentX + cellSize > maxRowWidth)
+                if(currentX + cellSize > maxRowWidth && maxRowWidth > cellSize)
                 {
                     currentX = StackPadding;
                     currentY += cellSize;
@@ -1002,6 +1040,7 @@ namespace RightClickAppLauncher.UI
 
         private void Organize_StackVertically_Click(object sender, RoutedEventArgs e)
         {
+            DeselectAllItems();
             Debug.WriteLine("Organize_StackVertically_Click");
             if(!LauncherItemsOnCanvas.Any()) return;
 
@@ -1021,6 +1060,7 @@ namespace RightClickAppLauncher.UI
 
         private void Organize_StackHorizontally_Click(object sender, RoutedEventArgs e)
         {
+            DeselectAllItems();
             Debug.WriteLine("Organize_StackHorizontally_Click");
             if(!LauncherItemsOnCanvas.Any()) return;
 
