@@ -1,32 +1,28 @@
-﻿using Newtonsoft.Json;
-using RightClickAppLauncher.Models;
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows.Data;
+using Newtonsoft.Json;
+using RightClickAppLauncher.Models;
 
-namespace RightClickAppLauncher.Converters
+namespace RightClickAppLauncher.Converters;
+
+public class ItemCountConverter : IValueConverter
 {
-    public class ItemCountConverter : IValueConverter
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        if(value is NamedLayout layout && !string.IsNullOrWhiteSpace(layout.LayoutJson))
         {
-            if(value is NamedLayout layout && !string.IsNullOrWhiteSpace(layout.LayoutJson))
+            try
             {
-                try
-                {
-                    var items = JsonConvert.DeserializeObject<List<LauncherItem>>(layout.LayoutJson);
-                    return items?.Count ?? 0;
-                }
-                catch
-                {
-                    return 0;
-                }
+                var items = JsonConvert.DeserializeObject<List<LauncherItem>>(layout.LayoutJson);
+                return items?.Count ?? 0;
             }
-            return 0;
+            catch
+            {
+                return 0;
+            }
         }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
+        return 0;
     }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
 }
