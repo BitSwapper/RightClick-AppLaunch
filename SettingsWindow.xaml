@@ -86,7 +86,7 @@
                         <!-- Preview Icon 1 - using actual icon style -->
                         <Border Canvas.Left="10" Canvas.Top="10"
                                 Background="#55FFFFFF" BorderBrush="#88FFFFFF" BorderThickness="1" 
-                                CornerRadius="5" Padding="5">
+                                CornerRadius="5" Padding="1">
                             <Grid Width="{Binding ElementName=IconSizeSlider, Path=Value}" 
                                   Height="{Binding ElementName=IconSizeSlider, Path=Value}">
                                 <!-- Using a placeholder icon - could be any from the actual launcher items -->
@@ -102,7 +102,7 @@
                                 Canvas.Left="60"
                                 Canvas.Top="10"
                                 Background="#55FFFFFF" BorderBrush="#88FFFFFF" BorderThickness="1" 
-                                CornerRadius="5" Padding="5">
+                                CornerRadius="5" Padding="1">
                             <Grid Width="{Binding ElementName=IconSizeSlider, Path=Value}" 
                                   Height="{Binding ElementName=IconSizeSlider, Path=Value}">
                                 <Rectangle Fill="#68B031" />
@@ -117,7 +117,7 @@
                                 Canvas.Left="10"
                                 Canvas.Top="60"
                                 Background="#55FFFFFF" BorderBrush="#88FFFFFF" BorderThickness="1" 
-                                CornerRadius="5" Padding="5">
+                                CornerRadius="5" Padding="1">
                             <Grid Width="{Binding ElementName=IconSizeSlider, Path=Value}" 
                                   Height="{Binding ElementName=IconSizeSlider, Path=Value}">
                                 <Rectangle Fill="#E04C00" />
