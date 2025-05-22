@@ -1,8 +1,7 @@
-﻿// File: Converters/IconPathToImageSourceConverter.cs
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows.Data;
 using RightClickAppLauncher.Models;
-using RightClickAppLauncher.Services; // Added for IconCacheService
+using RightClickAppLauncher.Services;
 
 namespace RightClickAppLauncher.Converters;
 

@@ -1,12 +1,11 @@
-﻿// File: Models/LauncherItem.cs
-using System.ComponentModel; // Required for INotifyPropertyChanged
-using System.Runtime.CompilerServices; // Required for CallerMemberName
+﻿using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 namespace RightClickAppLauncher.Models;
 
-public class LauncherItem : INotifyPropertyChanged // Implement INotifyPropertyChanged
+public class LauncherItem : INotifyPropertyChanged
 {
-    public Guid Id { get; set; } // Assuming Id doesn't change, no INPC needed
+    public Guid Id { get; set; }
 
     string _displayName;
     public string DisplayName
@@ -61,20 +60,20 @@ public class LauncherItem : INotifyPropertyChanged // Implement INotifyPropertyC
     public double X
     {
         get => _x;
-        set { _x = value; OnPropertyChanged(); } // Notify when X changes
+        set { _x = value; OnPropertyChanged(); }
     }
 
     double _y;
     public double Y
     {
         get => _y;
-        set { _y = value; OnPropertyChanged(); } // Notify when Y changes
+        set { _y = value; OnPropertyChanged(); }
     }
 
     public LauncherItem()
     {
         Id = Guid.NewGuid();
-        DisplayName = "New Application"; // Initial values
+        DisplayName = "New Application";
         ExecutablePath = string.Empty;
         Arguments = string.Empty;
         IconPath = string.Empty;

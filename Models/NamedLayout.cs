@@ -1,9 +1,8 @@
-﻿// File: Models/NamedLayout.cs
-namespace RightClickAppLauncher.Models;
+﻿namespace RightClickAppLauncher.Models;
 
 public class NamedLayout
 {
-    public Guid Id { get; set; } // Unique ID for this saved layout entry
+    public Guid Id { get; set; }
     public string Name { get; set; }
     public string LayoutJson { get; set; }
     public DateTime SavedDate { get; set; }

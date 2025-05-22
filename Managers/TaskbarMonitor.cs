@@ -1,5 +1,4 @@
-﻿// File: Managers/TaskbarMonitor.cs
-using System.Collections.ObjectModel; // For ObservableCollection
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows.Input;
 using RightClickAppLauncher.Models;
@@ -13,14 +12,14 @@ namespace RightClickAppLauncher.Managers;
 public class TaskbarMonitor : IDisposable
 {
     readonly WindowsHooks _windowsHooks;
-    readonly LauncherConfigManager _configManager; // Keep this
+    readonly LauncherConfigManager _configManager;
     LauncherMenuWindow _currentLauncherMenu;
 
     bool _reqCtrl, _reqAlt, _reqShift, _reqWin;
     bool _isDisposed = false;
     long _isProcessingClick = 0;
 
-    public TaskbarMonitor(LauncherConfigManager configManager) // Constructor is fine
+    public TaskbarMonitor(LauncherConfigManager configManager)
     {
         _configManager = configManager ?? throw new ArgumentNullException(nameof(configManager));
         _windowsHooks = new WindowsHooks();
@@ -28,7 +27,6 @@ public class TaskbarMonitor : IDisposable
         LoadHotkeySettings();
     }
 
-    // ... (StartMonitoring, StopMonitoring, ReloadHotkeySettings, LoadHotkeySettings, OnRightMouseClick, CheckHotkeyModifiers remain the same) ...
     public void StartMonitoring()
     {
         if(_isDisposed) throw new ObjectDisposedException(nameof(TaskbarMonitor));
@@ -92,23 +90,18 @@ public class TaskbarMonitor : IDisposable
     {
         CloseCurrentLauncherMenu();
 
-        // Load items into an ObservableCollection
         var itemsList = _configManager.LoadLauncherItems();
         var observableItems = new ObservableCollection<LauncherItem>(itemsList);
 
         if(!observableItems.Any() || observableItems.All(it => it.ExecutablePath == "NO_ACTION"))
         {
             Debug.WriteLine("No launcher items configured or only placeholder exists.");
-            // LauncherMenuWindow will show its own placeholder text based on this
         }
 
-        // Pass the configManager to the window so it can save changes
         _currentLauncherMenu = new LauncherMenuWindow(observableItems, position, _configManager);
         _currentLauncherMenu.Closed += (s, ev) =>
         {
             _currentLauncherMenu = null;
-            // Optional: Trigger a reload of config if settings window wasn't used
-            // but items were reordered and saved directly by LauncherMenuWindow
         };
         _currentLauncherMenu.Show();
     }
@@ -119,7 +112,7 @@ public class TaskbarMonitor : IDisposable
         {
             try
             {
-                _currentLauncherMenu.Close(); // This will trigger its Closing event for saving
+                _currentLauncherMenu.Close();
             }
             catch(Exception ex)
             {

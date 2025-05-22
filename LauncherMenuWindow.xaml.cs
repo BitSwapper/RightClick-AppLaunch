@@ -48,6 +48,8 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         {
             _currentIconSize = value;
             OnPropertyChanged(nameof(CurrentIconSize));
+            OnPropertyChanged(nameof(ItemVisualWidth));
+            OnPropertyChanged(nameof(ItemVisualHeight));
         }
     }
 
@@ -93,6 +95,11 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
 
     double GridCellSize => this.CurrentIconSize + 12 + Settings.Default.IconSpacing;
     const double StackPadding = 5.0;
+
+    const double IconBorderThicknessAndPadding = 4.0;
+    public double ItemVisualWidth => CurrentIconSize + IconBorderThicknessAndPadding;
+    public double ItemVisualHeight => CurrentIconSize + IconBorderThicknessAndPadding;
+
 
     public LauncherMenuWindow(ObservableCollection<LauncherItem> items, Point position, LauncherConfigManager configManager)
     {
@@ -169,7 +176,6 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
             elementToFocus = this;
             Debug.WriteLine($"Window_Loaded: MenuBorder is not explicitly focusable. Targeting window for focus.");
         }
-
 
         elementToFocus.Focus();
         Keyboard.Focus(elementToFocus);
@@ -271,7 +277,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
                 _dragStartPositionsSelectedItems[selItem.Id] = new Point(selItem.X, selItem.Y);
             }
 
-            _originalItemPositionBeforeDrag = new Point(clickedItem.X, clickedItem.Y);
+            _originalItemPositionBeforeDrag = new Point(_draggedLauncherItemModel.X, _draggedLauncherItemModel.Y);
         }
 
         e.Handled = true;
@@ -302,8 +308,12 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
 
             Point currentMousePosOnCanvas = e.GetPosition(_iconCanvasInstance);
 
-            double primaryTargetX = _originalItemPositionBeforeDrag.X + (currentMousePosOnCanvas.X - _mouseDragStartPoint_CanvasRelative.X);
-            double primaryTargetY = _originalItemPositionBeforeDrag.Y + (currentMousePosOnCanvas.Y - _mouseDragStartPoint_CanvasRelative.Y);
+            double deltaX = currentMousePosOnCanvas.X - _mouseDragStartPoint_CanvasRelative.X;
+            double deltaY = currentMousePosOnCanvas.Y - _mouseDragStartPoint_CanvasRelative.Y;
+
+            double primaryTargetX = _originalItemPositionBeforeDrag.X + deltaX;
+            double primaryTargetY = _originalItemPositionBeforeDrag.Y + deltaY;
+
 
             bool shiftPressed = Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift);
 
@@ -315,38 +325,46 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
                     double snapStep = fullGridStep / 2.0;
                     if(snapStep > 0)
                     {
-                        const double stackPaddingValue = StackPadding;
-                        primaryTargetX = stackPaddingValue + Math.Round((primaryTargetX - stackPaddingValue) / snapStep) * snapStep;
-                        primaryTargetY = stackPaddingValue + Math.Round((primaryTargetY - stackPaddingValue) / snapStep) * snapStep;
+                        primaryTargetX = StackPadding + Math.Round((primaryTargetX - StackPadding) / snapStep) * snapStep;
+                        primaryTargetY = StackPadding + Math.Round((primaryTargetY - StackPadding) / snapStep) * snapStep;
                     }
                 }
             }
 
-            double actualDeltaX = primaryTargetX - _originalItemPositionBeforeDrag.X;
-            double actualDeltaY = primaryTargetY - _originalItemPositionBeforeDrag.Y;
+            double actualAppliedDeltaX = primaryTargetX - _originalItemPositionBeforeDrag.X;
+            double actualAppliedDeltaY = primaryTargetY - _originalItemPositionBeforeDrag.Y;
 
             foreach(var selectedItem in _selectedLauncherItems)
             {
                 if(!_dragStartPositionsSelectedItems.TryGetValue(selectedItem.Id, out Point originalPosOfThisItem))
                 {
                     Debug.WriteLine($"ERROR: Could not find original position for {selectedItem.DisplayName} during drag.");
-                    originalPosOfThisItem = new Point(selectedItem.X - actualDeltaX, selectedItem.Y - actualDeltaY);
+                    originalPosOfThisItem = new Point(selectedItem.X - actualAppliedDeltaX, selectedItem.Y - actualAppliedDeltaY);
                 }
 
-                double newX = originalPosOfThisItem.X + actualDeltaX;
-                double newY = originalPosOfThisItem.Y + actualDeltaY;
+                double newX = originalPosOfThisItem.X + actualAppliedDeltaX;
+                double newY = originalPosOfThisItem.Y + actualAppliedDeltaY;
 
-                double itemWidth = this.CurrentIconSize + 12;
-                double itemHeight = this.CurrentIconSize + 12;
+                double currentItemVisualWidth = ItemVisualWidth;
+                double currentItemVisualHeight = ItemVisualHeight;
 
-                newX = Math.Max(0, Math.Min(newX, _iconCanvasInstance.ActualWidth - itemWidth));
-                newY = Math.Max(0, Math.Min(newY, _iconCanvasInstance.ActualHeight - itemHeight));
+                double canvasActualWidth = _iconCanvasInstance.ActualWidth;
+                double canvasActualHeight = _iconCanvasInstance.ActualHeight;
+
+                newX = Math.Max(0, Math.Min(newX, canvasActualWidth - currentItemVisualWidth));
+                newY = Math.Max(0, Math.Min(newY, canvasActualHeight - currentItemVisualHeight));
 
                 if(shiftPressed && StackPadding > 0)
                 {
                     newX = Math.Max(StackPadding, newX);
                     newY = Math.Max(StackPadding, newY);
+                    newX = Math.Min(newX, canvasActualWidth - currentItemVisualWidth - StackPadding);
+                    newY = Math.Min(newY, canvasActualHeight - currentItemVisualHeight - StackPadding);
                 }
+
+                newX = Math.Max(0, Math.Min(newX, canvasActualWidth - currentItemVisualWidth));
+                newY = Math.Max(0, Math.Min(newY, canvasActualHeight - currentItemVisualHeight));
+
 
                 selectedItem.X = newX;
                 selectedItem.Y = newY;
@@ -369,7 +387,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
                     {
                         if(Math.Abs(item.X - originalPos.X) > 0.1 || Math.Abs(item.Y - originalPos.Y) > 0.1)
                         {
-                            _dragHistory.RecordDrag(item, originalPos.X, originalPos.Y);
+                            _dragHistory.RecordDrag(item, originalPos.X, originalPos.Y, item.X, item.Y);
                             Debug.WriteLine($"Drag recorded for: {item.DisplayName}");
                         }
                     }
@@ -445,24 +463,31 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
     bool IsAnyContextMenuOpen()
     {
         if(BackgroundContextMenu.IsOpen) return true;
-        if(LauncherItemsHostControl == null) return false;
+
+        if(LauncherItemsHostControl == null || LauncherItemsHostControl.Items.Count == 0) return false;
+
         foreach(var itemData in LauncherItemsHostControl.Items)
         {
-            var c = LauncherItemsHostControl.ItemContainerGenerator.ContainerFromItem(itemData) as ContentPresenter;
-            if(c != null)
+            var container = LauncherItemsHostControl.ItemContainerGenerator.ContainerFromItem(itemData) as ContentPresenter;
+            if(container != null)
             {
-                c.ApplyTemplate();
-                var cc = VisualTreeHelper.GetChild(c, 0) as ContentControl;
-                if(cc != null)
+                container.ApplyTemplate();
+
+                var contentControl = VisualTreeHelper.GetChild(container, 0) as ContentControl;
+                if(contentControl != null)
                 {
-                    cc.ApplyTemplate();
-                    var b = cc.Template.FindName("IconBorder", cc) as Border;
-                    if(b?.ContextMenu?.IsOpen == true) return true;
+                    contentControl.ApplyTemplate();
+                    var iconBorder = contentControl.Template.FindName("IconBorder", contentControl) as Border;
+                    if(iconBorder?.ContextMenu?.IsOpen == true)
+                    {
+                        return true;
+                    }
                 }
             }
         }
         return false;
     }
+
 
     void Window_Closing(object sender, CancelEventArgs e)
     {
@@ -529,14 +554,14 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
                 if(Directory.Exists(wd)) psi.WorkingDirectory = wd;
                 else
                 {
-                    string ed = Path.GetDirectoryName(psi.FileName);
-                    if(Directory.Exists(ed)) psi.WorkingDirectory = ed;
+                    string exeDir = Path.GetDirectoryName(psi.FileName);
+                    if(Directory.Exists(exeDir)) psi.WorkingDirectory = exeDir;
                 }
             }
             else
             {
-                string ed = Path.GetDirectoryName(psi.FileName);
-                if(Directory.Exists(ed)) psi.WorkingDirectory = ed;
+                string exeDir = Path.GetDirectoryName(psi.FileName);
+                if(Directory.Exists(exeDir)) psi.WorkingDirectory = exeDir;
             }
             Process.Start(psi);
             Debug.WriteLine($"Started: {item.DisplayName}");
@@ -584,6 +609,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
             {
                 fe.ContextMenu.DataContext = item;
                 bool multipleSelected = _selectedLauncherItems.Count > 1;
+
                 foreach(var menuItemBase in fe.ContextMenu.Items.OfType<MenuItem>())
                 {
                     string header = menuItemBase.Header as string;
@@ -606,6 +632,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
             e.Handled = true;
         }
     }
+
 
     void IconBorder_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
@@ -640,14 +667,18 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         return null;
     }
 
+
     void IconContextMenu_Launch_Click(object sender, RoutedEventArgs e)
     {
         Debug.WriteLine("CtxMenuLaunch");
-        foreach(var itemToLaunch in _selectedLauncherItems.ToList())
+        if(_selectedLauncherItems.Any())
         {
-            LaunchItem(itemToLaunch);
+            foreach(var itemToLaunch in _selectedLauncherItems.ToList())
+            {
+                LaunchItem(itemToLaunch);
+            }
+            Close();
         }
-        if(_selectedLauncherItems.Any()) Close();
         else Debug.WriteLine("LaunchClick: No items were selected for launch via context menu.");
     }
 
@@ -659,93 +690,104 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         {
             try
             {
-                string p = Environment.ExpandEnvironmentVariables(item.ExecutablePath);
-                if(File.Exists(p)) Process.Start("explorer.exe", $"/select,\"{p}\"");
-                else if(Directory.Exists(p)) Process.Start("explorer.exe", $"\"{p}\"");
+                string path = Environment.ExpandEnvironmentVariables(item.ExecutablePath);
+                if(File.Exists(path)) Process.Start("explorer.exe", $"/select,\"{path}\"");
+                else if(Directory.Exists(path)) Process.Start("explorer.exe", $"\"{path}\"");
                 else
                 {
-                    string d = Path.GetDirectoryName(p);
-                    if(Directory.Exists(d)) Process.Start("explorer.exe", $"\"{d}\"");
-                    else MessageBox.Show("Cannot find location.", "Error");
+                    string dir = Path.GetDirectoryName(path);
+                    if(Directory.Exists(dir)) Process.Start("explorer.exe", $"\"{dir}\"");
+                    else MessageBox.Show("Cannot find file or its directory.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
-            catch(Exception ex) { MessageBox.Show($"Err: {ex.Message}", "Error"); }
+            catch(Exception ex) { MessageBox.Show($"Error opening file location: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
-        else Debug.WriteLine("OpenLocationClick: Null item/path or multiple items selected.");
+        else if(_selectedLauncherItems.Count > 1)
+        {
+            MessageBox.Show("This action is available for a single selected item only.", "Action Not Available", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else Debug.WriteLine("OpenLocationClick: Null item/path or conditions not met.");
     }
+
 
     void IconContextMenu_EditSettings_Click(object sender, RoutedEventArgs e)
     {
         Debug.WriteLine("CtxMenuEditSettings");
-        var i = GetLauncherItemFromContextMenu(sender);
-        if(i != null && _selectedLauncherItems.Count <= 1)
+        var itemToEdit = GetLauncherItemFromContextMenu(sender);
+        if(itemToEdit != null && _selectedLauncherItems.Count <= 1)
         {
             _isOpeningSettings = true;
-            var ed = new LauncherItemEditorWindow(i) { Owner = this };
-            if(ed.ShowDialog() == true)
+            var editorWindow = new LauncherItemEditorWindow(itemToEdit) { Owner = this };
+            if(editorWindow.ShowDialog() == true)
             {
-                var oI = LauncherItemsOnCanvas.FirstOrDefault(x => x.Id == i.Id);
-                int idx = oI != null ? LauncherItemsOnCanvas.IndexOf(oI) : -1;
-                if(idx != -1)
+                int index = LauncherItemsOnCanvas.IndexOf(itemToEdit);
+                if(index != -1)
                 {
-                    if(ed.Item.X == 0 && ed.Item.Y == 0 && (oI.X != 0 || oI.Y != 0))
-                    {
-                        ed.Item.X = oI.X;
-                        ed.Item.Y = oI.Y;
-                    }
-                    LauncherItemsOnCanvas[idx] = ed.Item;
-                    ed.Item.IsSelected = true;
-                    _selectedLauncherItems.Remove(i);
-                    _selectedLauncherItems.Add(ed.Item);
+                    LauncherItemsOnCanvas[index] = editorWindow.Item;
+
+                    itemToEdit.IsSelected = false;
+                    _selectedLauncherItems.Remove(itemToEdit);
+                    editorWindow.Item.IsSelected = true;
+                    _selectedLauncherItems.Add(editorWindow.Item);
+
                     SaveCurrentLayoutAsDefault();
-                    Debug.WriteLine($"EditSettings updated: {ed.Item.DisplayName}");
+                    Debug.WriteLine($"EditSettings updated: {editorWindow.Item.DisplayName}");
+                    LauncherItemsHostControl.Items.Refresh();
                 }
-                else Debug.WriteLine($"EditSettings: Cannot find original {i.DisplayName}");
+                else Debug.WriteLine($"EditSettings: Cannot find original item '{itemToEdit.DisplayName}' to update.");
             }
             _isOpeningSettings = false;
-            Focus();
+            this.Activate();
+            this.Focus();
         }
-        else Debug.WriteLine("EditSettingsClick: Null item or multiple items selected.");
+        else if(_selectedLauncherItems.Count > 1)
+        {
+            MessageBox.Show("This action is available for a single selected item only.", "Action Not Available", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else Debug.WriteLine("EditSettingsClick: Null item or conditions not met.");
     }
 
     void IconContextMenu_FileProperties_Click(object sender, RoutedEventArgs e)
     {
         Debug.WriteLine("CtxMenuFileProps");
-        var i = GetLauncherItemFromContextMenu(sender);
-        if(i != null && !string.IsNullOrWhiteSpace(i.ExecutablePath) && _selectedLauncherItems.Count <= 1)
+        var item = GetLauncherItemFromContextMenu(sender);
+        if(item != null && !string.IsNullOrWhiteSpace(item.ExecutablePath) && _selectedLauncherItems.Count <= 1)
         {
-            string fp = Environment.ExpandEnvironmentVariables(i.ExecutablePath);
-            if(File.Exists(fp) || Directory.Exists(fp))
+            string filePath = Environment.ExpandEnvironmentVariables(item.ExecutablePath);
+            if(File.Exists(filePath) || Directory.Exists(filePath))
             {
                 try
                 {
-                    SHELLEXECUTEINFO sei = new SHELLEXECUTEINFO
-                    {
-                        cbSize = Marshal.SizeOf(typeof(SHELLEXECUTEINFO)),
-                        fMask = SEE_MASK_INVOKEIDLIST,
-                        hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle,
-                        lpVerb = "properties",
-                        lpFile = fp,
-                        nShow = SW_SHOWNORMAL
-                    };
+                    SHELLEXECUTEINFO sei = new SHELLEXECUTEINFO();
+                    sei.cbSize = Marshal.SizeOf(typeof(SHELLEXECUTEINFO));
+                    sei.fMask = SEE_MASK_INVOKEIDLIST;
+                    sei.hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                    sei.lpVerb = "properties";
+                    sei.lpFile = filePath;
+                    sei.nShow = SW_SHOWNORMAL;
                     if(!ShellExecuteEx(ref sei))
                     {
-                        int err = Marshal.GetLastWin32Error();
-                        MessageBox.Show($"Cannot show file props. Err: {err}", "Error");
-                        Debug.WriteLine($"ShellEx Err: {err} for {fp}");
+                        int errorCode = Marshal.GetLastWin32Error();
+                        MessageBox.Show($"Could not show file properties. Error code: {errorCode}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Debug.WriteLine($"ShellExecuteEx failed with error {errorCode} for path {filePath}");
                     }
-                    else Debug.WriteLine($"Showing props for {fp}");
+                    else Debug.WriteLine($"Showing properties for {filePath}");
                 }
                 catch(Exception ex)
                 {
-                    MessageBox.Show($"Err showing file props: {ex.Message}", "Error");
-                    Debug.WriteLine($"Ex showing props: {ex}");
+                    MessageBox.Show($"Error showing file properties: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Debug.WriteLine($"Exception showing file properties: {ex}");
                 }
             }
-            else MessageBox.Show($"Not found: {fp}", "Error");
+            else MessageBox.Show($"File or directory not found: {filePath}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
-        else Debug.WriteLine("FilePropsClick: Null item/path or multiple items selected.");
+        else if(_selectedLauncherItems.Count > 1)
+        {
+            MessageBox.Show("This action is available for a single selected item only.", "Action Not Available", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else Debug.WriteLine("FilePropsClick: Null item/path or conditions not met.");
     }
+
 
     void IconContextMenu_Remove_Click(object sender, RoutedEventArgs e)
     {
@@ -760,8 +802,8 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         }
 
         string message = _selectedLauncherItems.Count == 1
-            ? $"Remove '{_selectedLauncherItems.First().DisplayName}'?"
-            : $"Remove {_selectedLauncherItems.Count} selected items?";
+            ? $"Are you sure you want to remove '{_selectedLauncherItems.First().DisplayName}'?"
+            : $"Are you sure you want to remove these {_selectedLauncherItems.Count} selected items?";
 
         var result = MessageBox.Show(message, "Confirm Removal", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if(result == MessageBoxResult.Yes)
@@ -775,7 +817,6 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
             UpdateNoItemsMessage();
             _dragHistory.ClearHistory();
             SaveCurrentLayoutAsDefault();
-            if(LauncherItemsHostControl != null) LauncherItemsHostControl.Items.Refresh();
         }
         _isShowingInputDialog = false;
         this.Activate();
@@ -829,7 +870,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
                 });
             }
             PersistAllNamedLayouts(allSavedLayouts);
-            MessageBox.Show($"Layout '{layoutName}' saved with icon settings.", "Layout Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"Layout '{layoutName}' saved with current window and icon settings.", "Layout Saved", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         _isShowingInputDialog = false;
     }
@@ -839,6 +880,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         DeselectAllItems();
         Debug.WriteLine($"ReloadItemsFromConfig. LoadDefault: {loadDefaultLayout}, Specific Layout: {layoutToLoad?.Name ?? "N/A"}");
         System.Collections.Generic.List<LauncherItem> itemsToLoad = null;
+
         if(!loadDefaultLayout && layoutToLoad != null)
         {
             try
@@ -853,22 +895,22 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
                     itemsToLoad = JsonConvert.DeserializeObject<System.Collections.Generic.List<LauncherItem>>(layoutToLoad.LayoutJson);
                     Debug.WriteLine($"Loaded specific layout: {layoutToLoad.Name}");
 
-                    if(layoutToLoad.WindowWidth > 0 && layoutToLoad.WindowHeight > 0)
+                    if(layoutToLoad.WindowWidth >= this.MinWidth && layoutToLoad.WindowHeight >= this.MinHeight)
                     {
                         this.Width = layoutToLoad.WindowWidth;
                         this.Height = layoutToLoad.WindowHeight;
                     }
-                    if(layoutToLoad.IconSize > 0) Settings.Default.IconSize = layoutToLoad.IconSize;
+                    if(layoutToLoad.IconSize >= 8) Settings.Default.IconSize = layoutToLoad.IconSize;
                     if(layoutToLoad.IconSpacing >= 0) Settings.Default.IconSpacing = layoutToLoad.IconSpacing;
 
                     Settings.Default.Save();
                     ApplyIconSize();
-                    Debug.WriteLine($"Applied icon size: {Settings.Default.IconSize}, spacing: {Settings.Default.IconSpacing}");
+                    Debug.WriteLine($"Applied layout settings - IconSize: {Settings.Default.IconSize}, Spacing: {Settings.Default.IconSpacing}");
                 }
             }
             catch(Exception ex)
             {
-                MessageBox.Show($"Error deserializing layout '{layoutToLoad.Name}': {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error deserializing layout '{layoutToLoad.Name}': {ex.Message}\nLoading default items instead.", "Layout Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 itemsToLoad = _configManager.LoadLauncherItems();
             }
         }
@@ -904,8 +946,8 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
                 NamedLayout namedLayout = JsonConvert.DeserializeObject<NamedLayout>(layoutEntryJson);
                 if(namedLayout != null)
                 {
-                    if(namedLayout.IconSize <= 0) namedLayout.IconSize = Settings.Default.IconSize;
-                    if(namedLayout.IconSpacing < 0) namedLayout.IconSpacing = Settings.Default.IconSpacing;
+                    if(namedLayout.IconSize <= 0) namedLayout.IconSize = 20;
+                    if(namedLayout.IconSpacing < 0) namedLayout.IconSpacing = 10;
                     namedLayouts.Add(namedLayout);
                 }
             }
@@ -920,10 +962,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
     void ApplyIconSize()
     {
         CurrentIconSize = Settings.Default.IconSize;
-        if(LauncherItemsOnCanvas != null)
-        {
-            foreach(var item in LauncherItemsOnCanvas) item.OnPropertyChanged("IconPath");
-        }
+
         this.UpdateLayout();
         this.InvalidateVisual();
     }
@@ -933,7 +972,9 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         _isOpeningSettings = false;
         ApplyIconSize();
         ReloadItemsFromConfig(true);
+
         if(sender is SettingsWindow sw) sw.Closed -= SettingsWindow_Closed;
+
         this.Show();
         this.Activate();
         this.Focus();
@@ -1000,6 +1041,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         }
         var manageWindow = new ManageLayoutsWindow(savedLayouts) { Owner = this };
         var result = manageWindow.ShowDialog();
+
         if(result == true)
         {
             if(manageWindow.LayoutsModified)
@@ -1014,10 +1056,12 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         }
         else if(manageWindow.LayoutsModified)
         {
-            var saveResult = MessageBox.Show("Save changes to layouts?", "Save Changes", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            var saveResult = MessageBox.Show("You made changes to layouts. Save them?", "Save Changes", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if(saveResult == MessageBoxResult.Yes) PersistAllNamedLayouts(manageWindow.GetUpdatedLayouts());
         }
         _isShowingInputDialog = false;
+        this.Activate();
+        this.Focus();
     }
 
     void Organize_AlignToGrid_Click(object sender, RoutedEventArgs e)
@@ -1027,16 +1071,18 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         if(_iconCanvasInstance == null || !LauncherItemsOnCanvas.Any()) return;
 
         double cellSize = GridCellSize;
+        if(cellSize <= 0) return;
+
         double currentX = StackPadding;
         double currentY = StackPadding;
-        double maxRowWidth = _iconCanvasInstance.ActualWidth > 0 ? _iconCanvasInstance.ActualWidth : this.Width - 20;
+        double maxRowWidth = _iconCanvasInstance.ActualWidth > 0 ? _iconCanvasInstance.ActualWidth - StackPadding : this.Width - 20 - StackPadding;
 
         foreach(var item in LauncherItemsOnCanvas.OrderBy(i => i.Y).ThenBy(i => i.X))
         {
             item.X = currentX;
             item.Y = currentY;
             currentX += cellSize;
-            if(currentX + cellSize > maxRowWidth && maxRowWidth > cellSize)
+            if(currentX + ItemVisualWidth > maxRowWidth && maxRowWidth > ItemVisualWidth)
             {
                 currentX = StackPadding;
                 currentY += cellSize;
@@ -1052,7 +1098,8 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         Debug.WriteLine("Organize_StackVertically_Click");
         if(!LauncherItemsOnCanvas.Any()) return;
 
-        double cellSize = GridCellSize;
+        double cellHeight = GridCellSize;
+        if(cellHeight <= 0) return;
         double currentY = StackPadding;
         double xPos = StackPadding;
 
@@ -1060,7 +1107,7 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         {
             item.X = xPos;
             item.Y = currentY;
-            currentY += cellSize;
+            currentY += cellHeight;
         }
         _dragHistory.ClearHistory();
         SaveCurrentLayoutAsDefault();
@@ -1072,7 +1119,8 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         Debug.WriteLine("Organize_StackHorizontally_Click");
         if(!LauncherItemsOnCanvas.Any()) return;
 
-        double cellSize = GridCellSize;
+        double cellWidth = GridCellSize;
+        if(cellWidth <= 0) return;
         double currentX = StackPadding;
         double yPos = StackPadding;
 
@@ -1080,8 +1128,71 @@ public partial class LauncherMenuWindow : Window, INotifyPropertyChanged
         {
             item.X = currentX;
             item.Y = yPos;
-            currentX += cellSize;
+            currentX += cellWidth;
         }
+        _dragHistory.ClearHistory();
+        SaveCurrentLayoutAsDefault();
+    }
+
+    void Organize_SnapToNearestGrid_Click(object sender, RoutedEventArgs e)
+    {
+        DeselectAllItems();
+        Debug.WriteLine("Organize_SnapToNearestGrid_Click");
+
+        if(_iconCanvasInstance == null || !LauncherItemsOnCanvas.Any()) return;
+
+        double fullGridStep = GridCellSize;
+        if(fullGridStep <= 0)
+        {
+            Debug.WriteLine("GridCellSize is not positive, cannot snap.");
+            return;
+        }
+
+        double snapStep = fullGridStep / 2.0;
+        if(snapStep <= 0)
+        {
+            Debug.WriteLine("Snap step is not positive, cannot snap.");
+            return;
+        }
+
+        double padding = StackPadding;
+        double itemVisualW = ItemVisualWidth;
+        double itemVisualH = ItemVisualHeight;
+
+        double canvasWidth = _iconCanvasInstance.ActualWidth > 0 ? _iconCanvasInstance.ActualWidth : (this.ActualWidth - MenuBorder.BorderThickness.Left - MenuBorder.BorderThickness.Right);
+        double canvasHeight = _iconCanvasInstance.ActualHeight > 0 ? _iconCanvasInstance.ActualHeight : (this.ActualHeight - MenuBorder.BorderThickness.Top - MenuBorder.BorderThickness.Bottom);
+
+        if(canvasWidth <= 0 || canvasHeight <= 0)
+        {
+            Debug.WriteLine("Canvas dimensions are not positive, cannot reliably snap.");
+            return;
+        }
+
+
+        foreach(var item in LauncherItemsOnCanvas)
+        {
+            double currentX = item.X;
+            double currentY = item.Y;
+
+            double snappedX = padding + Math.Round((currentX - padding) / snapStep) * snapStep;
+            double snappedY = padding + Math.Round((currentY - padding) / snapStep) * snapStep;
+
+            snappedX = Math.Max(padding, snappedX);
+            snappedY = Math.Max(padding, snappedY);
+
+            snappedX = Math.Min(snappedX, canvasWidth - itemVisualW - padding);
+            snappedY = Math.Min(snappedY, canvasHeight - itemVisualH - padding);
+
+            if(canvasWidth - itemVisualW - padding < padding)
+                snappedX = padding;
+            if(canvasHeight - itemVisualH - padding < padding)
+                snappedY = padding;
+
+
+            item.X = snappedX;
+            item.Y = snappedY;
+        }
+
         _dragHistory.ClearHistory();
         SaveCurrentLayoutAsDefault();
     }

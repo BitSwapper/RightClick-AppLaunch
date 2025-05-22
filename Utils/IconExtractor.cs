@@ -1,5 +1,4 @@
-﻿// File: Utils/IconExtractor.cs
-using System.IO;
+﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -19,7 +18,6 @@ public static class IconExtractor
         {
             if(File.Exists(filePath))
             {
-                // Try direct image load first for .ico, .png, .jpg etc.
                 var imageExtensions = new[] { ".ico", ".png", ".jpg", ".jpeg", ".bmp", ".gif" };
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
                 if(Array.Exists(imageExtensions, e => e == ext))
@@ -27,13 +25,12 @@ public static class IconExtractor
                     var bmi = new BitmapImage();
                     bmi.BeginInit();
                     bmi.UriSource = new Uri(filePath);
-                    bmi.CacheOption = BitmapCacheOption.OnLoad; // Load image fully
+                    bmi.CacheOption = BitmapCacheOption.OnLoad;
                     bmi.EndInit();
-                    bmi.Freeze(); // Important for use in other threads/contexts
+                    bmi.Freeze();
                     return bmi;
                 }
 
-                // If it's an .exe or .dll, extract icon
                 Icon icon = ExtractIconFromFile(filePath, smallIcon);
                 if(icon != null)
                 {
@@ -51,7 +48,7 @@ public static class IconExtractor
         {
             System.Diagnostics.Debug.WriteLine($"Error getting icon for {filePath}: {ex.Message}");
         }
-        return GetDefaultIcon(); // Fallback to a default icon
+        return GetDefaultIcon();
     }
 
     static Icon ExtractIconFromFile(string filePath, bool small)
@@ -63,16 +60,16 @@ public static class IconExtractor
 
             uint readIconCount = Shell32.ExtractIconEx(
                 filePath,
-                0, // Icon index
-                small ? hDummy : hIconEx, // Large icon handle
-                small ? hIconEx : hDummy, // Small icon handle
-                1  // Number of icons to extract
+                0,
+                small ? hDummy : hIconEx,
+                small ? hIconEx : hDummy,
+                1
             );
 
             if(readIconCount > 0 && hIconEx[0] != IntPtr.Zero)
             {
-                Icon extractedIcon = (Icon)Icon.FromHandle(hIconEx[0]).Clone(); // Clone to own the handle
-                User32.DestroyIcon(hIconEx[0]); // Release the original handle
+                Icon extractedIcon = (Icon)Icon.FromHandle(hIconEx[0]).Clone();
+                User32.DestroyIcon(hIconEx[0]);
                 return extractedIcon;
             }
         }
@@ -85,7 +82,6 @@ public static class IconExtractor
 
     static ImageSource GetDefaultIcon()
     {
-        // Return a generic system icon or a built-in placeholder
         Icon sysIcon = SystemIcons.Application;
         ImageSource imgSource = Imaging.CreateBitmapSourceFromHIcon(
             sysIcon.Handle,

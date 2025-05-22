@@ -5,7 +5,7 @@ namespace RightClickAppLauncher;
 
 public static class StaticVals
 {
-    public const string AppName = "Right Click App Launcher"; // UPDATED
+    public const string AppName = "Right Click App Launcher";
     public static readonly string AppPath = Process.GetCurrentProcess().MainModule.FileName;
     public const string RegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 

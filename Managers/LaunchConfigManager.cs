@@ -21,7 +21,6 @@ public class LauncherConfigManager
         catch(Exception ex)
         {
             Debug.WriteLine($"Error loading launcher items: {ex.Message}");
-            // Optionally, backup corrupted settings and start fresh
         }
         return new List<LauncherItem>();
     }

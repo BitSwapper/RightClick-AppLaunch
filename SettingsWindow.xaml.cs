@@ -31,7 +31,6 @@ public partial class SettingsWindow : Window
         LaunchOnStartupCheckBox.IsChecked = Settings.Default.LaunchOnStartup;
         LoadHotkeySettings();
 
-        // Load icon size and spacing settings
         IconSizeSlider.Value = Settings.Default.IconSize;
         IconSpacingSlider.Value = Settings.Default.IconSpacing;
 
@@ -69,7 +68,6 @@ public partial class SettingsWindow : Window
         SaveStartupSetting();
         SaveHotkeySettings();
 
-        // Save icon size and spacing settings
         Settings.Default.IconSize = IconSizeSlider.Value;
         Settings.Default.IconSpacing = IconSpacingSlider.Value;
 
@@ -109,7 +107,6 @@ public partial class SettingsWindow : Window
         IconSizeSlider.ValueChanged += UpdatePreview;
         IconSpacingSlider.ValueChanged += UpdatePreview;
 
-        // Initial preview update
         UpdatePreview(null, null);
     }
 
@@ -119,13 +116,11 @@ public partial class SettingsWindow : Window
 
         double iconSize = IconSizeSlider.Value;
         double spacing = IconSpacingSlider.Value;
-        double totalSize = iconSize + 10; // 10 is for border padding (5 * 2)
+        double totalSize = iconSize + 10;
 
-        // Position second icon (to the right of first icon)
         Canvas.SetLeft(PreviewIcon2Border, 10 + totalSize + spacing);
         Canvas.SetTop(PreviewIcon2Border, 10);
 
-        // Position third icon (below first icon)
         Canvas.SetLeft(PreviewIcon3Border, 10);
         Canvas.SetTop(PreviewIcon3Border, 10 + totalSize + spacing);
     }

@@ -1,13 +1,11 @@
-﻿// File: Native/OS_StartupManager.cs
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.Win32;
-using static RightClickAppLauncher.StaticVals; // Ensure this using matches your StaticVals namespace
+using static RightClickAppLauncher.StaticVals;
 
 namespace RightClickAppLauncher.Native;
 
 public static class OS_StartupManager
 {
-    // ... (rest of the code is the same as provided in the question, just ensure namespace is correct)
     public static bool IsInStartup()
     {
         try
@@ -35,14 +33,14 @@ public static class OS_StartupManager
         try
         {
             using RegistryKey key = Registry.CurrentUser.OpenSubKey(RegistryPath, true) ??
-                                  Registry.CurrentUser.CreateSubKey(RegistryPath, true); // Create if not exists
+                                  Registry.CurrentUser.CreateSubKey(RegistryPath, true);
 
             if(key == null)
             {
                 Debug.WriteLine("Error adding to startup: Could not open or create registry key.");
                 throw new InvalidOperationException("Could not open or create startup registry key.");
             }
-            key.SetValue(AppName, $"\"{AppPath}\""); // Enclose path in quotes
+            key.SetValue(AppName, $"\"{AppPath}\"");
             Debug.WriteLine($"Added startup entry: {AppName} -> \"{AppPath}\"");
         }
         catch(UnauthorizedAccessException ex)

@@ -1,14 +1,11 @@
-﻿// File: Native/WindowsHooks.cs
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-// CHANGE NAMESPACE
 namespace RightClickAppLauncher.Native;
 
 public class WindowsHooks
 {
-    // ... (rest of the code is the same)
     #region Win32 API Declarations
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
@@ -31,7 +28,6 @@ public class WindowsHooks
     public static extern bool GetCursorPos(out POINT lpPoint);
 
     const int WH_MOUSE_LL = 14;
-    //const int WM_RBUTTONDOWN = 0x0204; // We're interested in RBUTTONUP for menus
     const int WM_RBUTTONUP = 0x0205;
 
     delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -41,11 +37,10 @@ public class WindowsHooks
     #region Hook Implementation
 
     IntPtr mouseHookHandle = IntPtr.Zero;
-    HookProc mouseProcDelegate; // Keep a reference to the delegate
+    HookProc mouseProcDelegate;
     public event EventHandler<MouseHookEventArgs> RightMouseClick;
 
     public WindowsHooks() =>
-        // Store the delegate instance to prevent it from being garbage collected
         mouseProcDelegate = MouseHookCallback;
 
 
@@ -53,11 +48,8 @@ public class WindowsHooks
     {
         if(mouseHookHandle == IntPtr.Zero)
         {
-            // Get the handle of the current module (your application)
-            // For .NET Core/5+ Process.GetCurrentProcess().MainModule.ModuleName might be problematic for single file exe.
-            // Using GetModuleHandle(null) gets the handle of the file used to create the calling process (.exe file)
             IntPtr hMod = GetModuleHandle(null);
-            if(hMod == IntPtr.Zero) // Fallback for safety, though GetModuleHandle(null) should work
+            if(hMod == IntPtr.Zero)
             {
                 hMod = Marshal.GetHINSTANCE(Assembly.GetExecutingAssembly().GetModules()[0]);
             }
@@ -103,13 +95,11 @@ public class WindowsHooks
             if(wParam == (IntPtr)WM_RBUTTONUP)
             {
                 POINT cursorPos = hookStruct.pt;
-                // IntPtr windowUnderCursor = WindowFromPoint(cursorPos); // Not strictly needed for global menu
 
                 RightMouseClick?.Invoke(this, new MouseHookEventArgs
                 {
                     X = cursorPos.X,
                     Y = cursorPos.Y,
-                    // WindowHandle = windowUnderCursor // Can be omitted if not used
                 });
             }
         }
@@ -129,9 +119,8 @@ public class WindowsHooks
         public uint time;
         public IntPtr dwExtraInfo;
     }
-    // POINT struct should be defined or accessible here if not already global
     [StructLayout(LayoutKind.Sequential)]
-    public struct POINT // Made public for MouseHookEventArgs
+    public struct POINT
     {
         public int X;
         public int Y;
@@ -146,5 +135,4 @@ public class MouseHookEventArgs : EventArgs
 {
     public int X { get; set; }
     public int Y { get; set; }
-    // public IntPtr WindowHandle { get; set; } // Can be omitted
 }

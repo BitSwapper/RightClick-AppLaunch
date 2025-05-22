@@ -57,7 +57,6 @@ public partial class ManageLayoutsWindow : Window
                     return;
                 }
 
-                // Check if name already exists
                 if(Layouts.Any(l => l != selectedLayout && l.Name.Equals(newName, StringComparison.OrdinalIgnoreCase)))
                 {
                     MessageBox.Show($"A layout named '{newName}' already exists.", "Duplicate Name", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -67,7 +66,6 @@ public partial class ManageLayoutsWindow : Window
                 selectedLayout.Name = newName;
                 LayoutsModified = true;
 
-                // Refresh the ListView to show the new name
                 LayoutsListView.Items.Refresh();
             }
         }
@@ -152,7 +150,6 @@ public partial class ManageLayoutsWindow : Window
                     return;
                 }
 
-                // Check if layout name already exists
                 if(Layouts.Any(l => l.Name.Equals(importedLayout.Name, StringComparison.OrdinalIgnoreCase)))
                 {
                     var result = MessageBox.Show($"A layout named '{importedLayout.Name}' already exists. Do you want to overwrite it?",
@@ -182,7 +179,6 @@ public partial class ManageLayoutsWindow : Window
                     }
                     else
                     {
-                        // Remove existing layout with same name
                         var existingLayout = Layouts.FirstOrDefault(l => l.Name.Equals(importedLayout.Name, StringComparison.OrdinalIgnoreCase));
                         if(existingLayout != null)
                         {
@@ -191,12 +187,11 @@ public partial class ManageLayoutsWindow : Window
                     }
                 }
 
-                // Ensure imported layout has valid icon settings (for backward compatibility)
                 if(importedLayout.IconSize <= 0)
-                    importedLayout.IconSize = 20; // Default
+                    importedLayout.IconSize = 20;
 
                 if(importedLayout.IconSpacing < 0)
-                    importedLayout.IconSpacing = 10; // Default
+                    importedLayout.IconSpacing = 10;
 
                 Layouts.Add(importedLayout);
                 LayoutsModified = true;

@@ -1,11 +1,8 @@
-﻿// File: Native/WindowsInterop.cs
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 
-// CHANGE NAMESPACE
 namespace RightClickAppLauncher.Native;
 
-// ... (rest of the code is the same. POINT, RECT, APPBARDATA structs should be within this namespace or accessible)
 public static class WindowsInterop
 {
     #region Window Management
@@ -104,7 +101,7 @@ public static class WindowsInterop
 #region Native Structures
 
 [StructLayout(LayoutKind.Sequential)]
-public struct POINT // Ensure this POINT is compatible with WindowsHooks.POINT if it's used across both
+public struct POINT
 {
     public int X;
     public int Y;

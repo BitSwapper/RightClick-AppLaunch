@@ -1,12 +1,11 @@
-﻿// File: UI/LauncherItemEditorWindow.xaml.cs
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using RightClickAppLauncher.Models;
 using DialogResultForms = System.Windows.Forms.DialogResult;
-using FolderBrowserDialog = System.Windows.Forms.FolderBrowserDialog; // Add this for FolderBrowserDialog
+using FolderBrowserDialog = System.Windows.Forms.FolderBrowserDialog;
 using MessageBox = System.Windows.MessageBox;
-using OpenFileDialog = Microsoft.Win32.OpenFileDialog; // Alias to avoid conflict if Forms.OpenFileDialog is used
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 
 namespace RightClickAppLauncher.UI;
 
@@ -26,7 +25,6 @@ public partial class LauncherItemEditorWindow : Window, INotifyPropertyChanged
     public LauncherItemEditorWindow(LauncherItem itemToEdit)
     {
         InitializeComponent();
-        // Clone all properties including X and Y position
         Item = new LauncherItem
         {
             Id = itemToEdit.Id,
@@ -35,15 +33,15 @@ public partial class LauncherItemEditorWindow : Window, INotifyPropertyChanged
             Arguments = itemToEdit.Arguments,
             IconPath = itemToEdit.IconPath,
             WorkingDirectory = itemToEdit.WorkingDirectory,
-            X = itemToEdit.X,  // Preserve X position
-            Y = itemToEdit.Y   // Preserve Y position
+            X = itemToEdit.X,
+            Y = itemToEdit.Y
         };
         DataContext = this;
     }
 
     void BrowseExecutable_Click(object sender, RoutedEventArgs e)
     {
-        OpenFileDialog openFileDialog = new OpenFileDialog // Using Microsoft.Win32.OpenFileDialog
+        OpenFileDialog openFileDialog = new OpenFileDialog
         {
             Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*",
             Title = "Select Executable File"
@@ -63,10 +61,9 @@ public partial class LauncherItemEditorWindow : Window, INotifyPropertyChanged
         }
     }
 
-    // FIXED: Now accepts all image types
     void BrowseIcon_Click(object sender, RoutedEventArgs e)
     {
-        OpenFileDialog openFileDialog = new OpenFileDialog // Using Microsoft.Win32.OpenFileDialog
+        OpenFileDialog openFileDialog = new OpenFileDialog
         {
             Filter = "All Supported Images|*.ico;*.exe;*.dll;*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.tiff;*.tif|" +
                      "Icon Files (*.ico)|*.ico|" +
@@ -84,11 +81,10 @@ public partial class LauncherItemEditorWindow : Window, INotifyPropertyChanged
 
     void BrowseWorkingDirectory_Click(object sender, RoutedEventArgs e)
     {
-        using FolderBrowserDialog dialog = new FolderBrowserDialog(); // Using System.Windows.Forms.FolderBrowserDialog
+        using FolderBrowserDialog dialog = new FolderBrowserDialog();
         dialog.Description = "Select Working Directory";
-        dialog.ShowNewFolderButton = true; // Allow creating new folders
+        dialog.ShowNewFolderButton = true;
 
-        // Set initial path if available
         if(!string.IsNullOrWhiteSpace(Item.WorkingDirectory) && Directory.Exists(Item.WorkingDirectory))
         {
             dialog.SelectedPath = Item.WorkingDirectory;
@@ -101,15 +97,13 @@ public partial class LauncherItemEditorWindow : Window, INotifyPropertyChanged
                 dialog.SelectedPath = exeDir;
             }
         }
-        // else, it will default to a system path like "My Computer" or "Desktop"
 
-        // Show the dialog. Note: FolderBrowserDialog.ShowDialog() returns a System.Windows.Forms.DialogResult
-        DialogResultForms result = dialog.ShowDialog(); // No owner window passed for simplicity
+        DialogResultForms result = dialog.ShowDialog();
 
         if(result == DialogResultForms.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
         {
             Item.WorkingDirectory = dialog.SelectedPath;
-            OnPropertyChanged(nameof(Item)); // Notify UI of changes in the Item object
+            OnPropertyChanged(nameof(Item));
         }
     }
 

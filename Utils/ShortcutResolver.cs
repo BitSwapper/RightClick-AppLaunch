@@ -1,5 +1,4 @@
-﻿// File: Utils/ShortcutResolver.cs
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -8,7 +7,6 @@ namespace RightClickAppLauncher.Utils;
 
 public static class ShortcutResolver
 {
-    // COM Interop for IShellLink
     [ComImport]
     [Guid("000214F9-0000-0000-C000-000000000046")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -49,14 +47,11 @@ public static class ShortcutResolver
         try
         {
             link = (IShellLinkW)new ShellLink();
-            // Load the shortcut
-            (link as System.Runtime.InteropServices.ComTypes.IPersistFile)?.Load(shortcutPath, 0); // 0 = STGM_READ
+            (link as System.Runtime.InteropServices.ComTypes.IPersistFile)?.Load(shortcutPath, 0);
 
-            // Resolve the shortcut (optional, but good practice)
-            // link.Resolve(IntPtr.Zero, 0); // No UI, no update if broken link
 
-            StringBuilder sb = new StringBuilder(260); // MAX_PATH
-            link.GetPath(sb, sb.Capacity, IntPtr.Zero, 0); // 0 = SLGP_SHORTPATH (can use SLGP_UNCPRIORITY)
+            StringBuilder sb = new StringBuilder(260);
+            link.GetPath(sb, sb.Capacity, IntPtr.Zero, 0);
 
             string targetPath = sb.ToString();
             Debug.WriteLine($"Resolved shortcut '{shortcutPath}' to '{targetPath}'");
@@ -65,7 +60,7 @@ public static class ShortcutResolver
         catch(COMException ex)
         {
             Debug.WriteLine($"COMException resolving shortcut '{shortcutPath}': {ex.Message}");
-            return null; // Or return shortcutPath itself if resolution fails and you want to try executing the .lnk
+            return null;
         }
         catch(Exception ex)
         {

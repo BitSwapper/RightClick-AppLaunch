@@ -60,7 +60,6 @@
                         <MenuItem Header="Remove" Click="IconContextMenu_Remove_Click"/>
                     </ContextMenu>
                 </Border.ContextMenu>
-                <!-- MODIFIED Image Source Binding -->
                 <Image Source="{Binding ., Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='large'}" 
                        Width="{Binding Path=DataContext.CurrentIconSize, RelativeSource={RelativeSource AncestorType=Window}}" 
                        Height="{Binding Path=DataContext.CurrentIconSize, RelativeSource={RelativeSource AncestorType=Window}}" 
@@ -93,6 +92,8 @@
                     <MenuItem Header="Align to Grid (Top-Left)" Click="Organize_AlignToGrid_Click"/>
                     <MenuItem Header="Stack Vertically (Left)" Click="Organize_StackVertically_Click"/>
                     <MenuItem Header="Stack Horizontally (Top)" Click="Organize_StackHorizontally_Click"/>
+                    <Separator/>
+                    <MenuItem Header="Snap All to Nearest Grid" Click="Organize_SnapToNearestGrid_Click"/>
                 </MenuItem>
                 <Separator/>
                 <MenuItem Header="Save Current Layout As..." Click="SaveLayoutAs_Click"/>
