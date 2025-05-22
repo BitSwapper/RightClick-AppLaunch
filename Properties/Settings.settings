@@ -44,5 +44,11 @@
     <Setting Name="IconSpacing" Type="System.Double" Scope="User">
       <Value Profile="(Default)">10</Value>
     </Setting>
+    <Setting Name="DefaultLayoutIconSize" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">25</Value>
+    </Setting>
+    <Setting Name="DefaultLayoutIconSpacing" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">5</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
