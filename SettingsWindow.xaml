@@ -6,13 +6,13 @@
         xmlns:local="clr-namespace:RightClickAppLauncher"
         xmlns:converters="clr-namespace:RightClickAppLauncher.Converters"
         mc:Ignorable="d"
-        Icon="Resources/Gear.ico"
+        Icon="pack://application:,,,/Resources/Gear.ico"
         Title="Settings - Right Click App Launcher" Height="850" Width="600"
     WindowStartupLocation="CenterScreen" ShowInTaskbar="False" MinHeight="450" MinWidth="450">
     <Window.Resources>
         <converters:IconPathToImageSourceConverter x:Key="IconPathToImageSourceConverter"/>
         <converters:IconSizeToFontSizeConverter x:Key="IconSizeToFontSizeConverter"/>
-        
+
     </Window.Resources>
     <Grid Margin="10">
         <Grid.RowDefinitions>
@@ -143,7 +143,8 @@
                             <GridViewColumn Header="Icon" Width="50">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Image Source="{Binding IconPath, Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='small'}" 
+                                        <!-- MODIFIED Image Source Binding -->
+                                        <Image Source="{Binding ., Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='small'}" 
                                                Width="24" Height="24" Margin="2"/>
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>

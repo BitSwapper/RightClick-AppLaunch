@@ -60,7 +60,8 @@
                         <MenuItem Header="Remove" Click="IconContextMenu_Remove_Click"/>
                     </ContextMenu>
                 </Border.ContextMenu>
-                <Image Source="{Binding IconPath, Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='large'}" 
+                <!-- MODIFIED Image Source Binding -->
+                <Image Source="{Binding ., Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='large'}" 
                        Width="{Binding Path=DataContext.CurrentIconSize, RelativeSource={RelativeSource AncestorType=Window}}" 
                        Height="{Binding Path=DataContext.CurrentIconSize, RelativeSource={RelativeSource AncestorType=Window}}" 
                        Stretch="Uniform"/>

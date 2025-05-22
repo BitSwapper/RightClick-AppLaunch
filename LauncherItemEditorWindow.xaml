@@ -44,7 +44,11 @@
                 BorderBrush="#CCCCCC" BorderThickness="1" 
                 Background="#F5F5F5" Padding="5" Margin="5,5,0,5"
                 Width="54" Height="54" VerticalAlignment="Top">
-            <Image Source="{Binding ElementName=IconPathTextBox, Path=Text, Converter={StaticResource IconPathToImageSourceConverter}}" 
+            <!-- MODIFIED Image Source Binding: Bind to the DataContext (which is LauncherItemEditorWindow), then Path to Item. 
+                 The converter will receive the LauncherItem object.
+                 Use ConverterParameter 'small' for a reasonably sized preview.
+            -->
+            <Image Source="{Binding Item, Converter={StaticResource IconPathToImageSourceConverter}, ConverterParameter='small'}" 
                    Width="42" Height="42"
                    RenderOptions.BitmapScalingMode="HighQuality"/>
         </Border>

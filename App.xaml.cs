@@ -1,158 +1,198 @@
 ﻿// File: App.xaml.cs
+using System;
 using System.Diagnostics;
+using System.Drawing; // For SystemIcons
+using System.Linq;
+using System.Threading; // For Mutex
 using System.Windows;
+using System.Windows.Forms; // For NotifyIcon, ContextMenuStrip, etc.
 using RightClickAppLauncher.Managers;
-using RightClickAppLauncher.Native; // For OS_StartupManager
+using RightClickAppLauncher.Native;
 using RightClickAppLauncher.Properties;
+using RightClickAppLauncher.Services; // Added for IconCacheService
 
-namespace RightClickAppLauncher;
-
-public partial class App : System.Windows.Application
+namespace RightClickAppLauncher
 {
-    NotifyIcon _notifyIcon;
-    TaskbarMonitor _taskbarMonitor;
-    LauncherConfigManager _configManager;
-    bool _isExiting = false;
-
-    protected override void OnStartup(StartupEventArgs e)
+    public partial class App : System.Windows.Application
     {
-        base.OnStartup(e);
+        private NotifyIcon _notifyIcon;
+        private TaskbarMonitor _taskbarMonitor;
+        private LauncherConfigManager _configManager;
+        private bool _isExiting = false;
+        private Mutex _mutex;
 
-        // Ensure only one instance is running
-        string appName = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name;
-        bool createdNew;
-        System.Threading.Mutex mutex = new System.Threading.Mutex(true, appName, out createdNew);
-
-        if(!createdNew)
+        protected override async void OnStartup(StartupEventArgs e)
         {
-            System.Windows.MessageBox.Show($"{StaticVals.AppName} is already running.", "Application Already Running", MessageBoxButton.OK, MessageBoxImage.Information);
-            _isExiting = true;
-            System.Windows.Application.Current.Shutdown();
-            return;
-        }
+            base.OnStartup(e);
 
+            // Ensure only one instance is running
+            string appName = System.Reflection.Assembly.GetExecutingAssembly().GetName().Name;
+            bool createdNew;
+            _mutex = new Mutex(true, appName, out createdNew);
 
-        _configManager = new LauncherConfigManager();
-        _taskbarMonitor = new TaskbarMonitor(_configManager);
-
-        SetupTrayIcon();
-        ApplyStartupSetting();
-
-        _taskbarMonitor.StartMonitoring();
-        Debug.WriteLine($"{StaticVals.AppName} started.");
-    }
-
-    void SetupTrayIcon()
-    {
-        _notifyIcon = new NotifyIcon();
-        _notifyIcon.Text = StaticVals.AppName;
-
-        // Load icon from Resources/Gear.ico
-        try
-        {
-            var iconUri = new Uri("pack://application:,,,/Resources/Gear.ico");
-            var iconStream = System.Windows.Application.GetResourceStream(iconUri);
-
-            if(iconStream != null)
+            if(!createdNew)
             {
-                _notifyIcon.Icon = new System.Drawing.Icon(iconStream.Stream);
-                Debug.WriteLine("System tray icon loaded successfully");
+                System.Windows.MessageBox.Show($"{StaticVals.AppName} is already running.", "Application Already Running", MessageBoxButton.OK, MessageBoxImage.Information);
+                _isExiting = true; // Set flag before shutting down
+                Shutdown(); // Use Shutdown() instead of Current.Shutdown() here for clarity
+                return;
+            }
+
+            _configManager = new LauncherConfigManager();
+
+            // Preload icons asynchronously
+            var itemsToPreload = _configManager.LoadLauncherItems();
+            if(itemsToPreload.Any())
+            {
+                Debug.WriteLine($"App.OnStartup: Starting to preload icons for {itemsToPreload.Count} items.");
+                // No await here, let it run in the background. Application startup continues.
+                // IconCacheService.Instance is initialized lazily on first access.
+                _ = IconCacheService.Instance.PreloadIconsAsync(itemsToPreload)
+                    .ContinueWith(t => {
+                        if(t.IsFaulted) Debug.WriteLine($"Icon preloading failed: {t.Exception?.GetBaseException().Message}");
+                        else Debug.WriteLine("Icon preloading task completed.");
+                    });
             }
             else
             {
-                // Fallback to system icon
-                _notifyIcon.Icon = SystemIcons.Application;
-                Debug.WriteLine("Using SystemIcons.Application as tray icon.");
+                Debug.WriteLine("App.OnStartup: No items to preload icons for.");
             }
+
+            _taskbarMonitor = new TaskbarMonitor(_configManager);
+
+            SetupTrayIcon();
+            ApplyStartupSetting();
+
+            _taskbarMonitor.StartMonitoring();
+            Debug.WriteLine($"{StaticVals.AppName} started.");
         }
-        catch(Exception ex)
+
+        void SetupTrayIcon()
         {
-            _notifyIcon.Icon = SystemIcons.Application; // Fallback icon
-            Debug.WriteLine($"Error loading tray icon: {ex.Message}");
-        }
+            _notifyIcon = new NotifyIcon();
+            _notifyIcon.Text = StaticVals.AppName;
 
-        var contextMenu = new ContextMenuStrip();
-        contextMenu.Items.Add("Settings...", null, OnSettingsClicked);
-        contextMenu.Items.Add(new ToolStripSeparator());
-        contextMenu.Items.Add("Exit", null, OnExitClicked);
-        _notifyIcon.ContextMenuStrip = contextMenu;
-
-        _notifyIcon.Visible = true;
-    }
-
-    void ApplyStartupSetting()
-    {
-        try
-        {
-            if(Settings.Default.LaunchOnStartup)
+            try
             {
-                if(!OS_StartupManager.IsInStartup())
+                var iconUri = new Uri("pack://application:,,,/Resources/Gear.ico");
+                var iconStreamInfo = System.Windows.Application.GetResourceStream(iconUri);
+
+                if(iconStreamInfo != null)
                 {
-                    OS_StartupManager.AddToStartup();
+                    using(var iconStream = iconStreamInfo.Stream)
+                    {
+                        _notifyIcon.Icon = new System.Drawing.Icon(iconStream);
+                    }
+                    Debug.WriteLine("System tray icon loaded successfully from Gear.ico");
+                }
+                else
+                {
+                    _notifyIcon.Icon = SystemIcons.Application;
+                    Debug.WriteLine("Failed to load Gear.ico, using SystemIcons.Application as tray icon.");
                 }
             }
-            else
+            catch(Exception ex)
             {
-                if(OS_StartupManager.IsInStartup())
+                _notifyIcon.Icon = SystemIcons.Application; // Fallback icon
+                Debug.WriteLine($"Error loading tray icon: {ex.Message}. Using SystemIcons.Application.");
+            }
+
+            var contextMenu = new ContextMenuStrip();
+            contextMenu.Items.Add("Settings...", null, OnSettingsClicked);
+            contextMenu.Items.Add(new ToolStripSeparator());
+            contextMenu.Items.Add("Exit", null, OnExitClicked);
+            _notifyIcon.ContextMenuStrip = contextMenu;
+
+            _notifyIcon.Visible = true;
+        }
+
+        void ApplyStartupSetting()
+        {
+            try
+            {
+                if(Settings.Default.LaunchOnStartup)
                 {
-                    OS_StartupManager.RemoveFromStartup();
+                    if(!OS_StartupManager.IsInStartup())
+                    {
+                        OS_StartupManager.AddToStartup();
+                    }
+                }
+                else
+                {
+                    if(OS_StartupManager.IsInStartup())
+                    {
+                        OS_StartupManager.RemoveFromStartup();
+                    }
                 }
             }
+            catch(Exception ex)
+            {
+                Debug.WriteLine($"Error managing startup registry: {ex.Message}");
+            }
         }
-        catch(Exception ex)
+
+        void OnSettingsClicked(object sender, EventArgs e)
         {
-            Debug.WriteLine($"Error managing startup registry: {ex.Message}");
-            // Non-fatal, app can continue
+            // Bring to front if already open, or create new.
+            // This simple version just creates a new one.
+            // Consider a more robust way to manage the SettingsWindow instance if needed.
+            var settingsWindow = new SettingsWindow { Owner = GetActiveWindow() };
+            bool? result = settingsWindow.ShowDialog();
+            if(result == true)
+            {
+                _taskbarMonitor.ReloadHotkeySettings();
+                // After settings are saved, items might have changed. Re-cache if necessary.
+                // For simplicity, a full re-cache on settings save can be done,
+                // or a more granular update if performance is critical.
+                // Kicking off a new preload task would be one way.
+                var itemsToPreload = _configManager.LoadLauncherItems();
+                _ = IconCacheService.Instance.PreloadIconsAsync(itemsToPreload)
+                   .ContinueWith(t => {
+                       if(t.IsFaulted) Debug.WriteLine($"Icon re-preloading failed: {t.Exception?.GetBaseException().Message}");
+                       else Debug.WriteLine("Icon re-preloading task completed after settings change.");
+                   });
+            }
         }
-    }
 
-
-    void OnSettingsClicked(object sender, EventArgs e)
-    {
-        var settingsWindow = new SettingsWindow { Owner = GetActiveWindow() };
-        bool? result = settingsWindow.ShowDialog();
-        if(result == true) // If settings were saved
+        Window GetActiveWindow()
         {
-            _taskbarMonitor.ReloadHotkeySettings(); // Reload hotkey settings
+            // Gets the currently active window of this application.
+            return System.Windows.Application.Current.Windows.OfType<Window>().SingleOrDefault(x => x.IsActive);
+            // Fallback: return Application.Current.MainWindow if you have one and it's suitable.
         }
-    }
 
-    // Helper to find an active window to be owner of dialogs
-    Window GetActiveWindow()
-    {
-        foreach(Window window in System.Windows.Application.Current.Windows)
+        void OnExitClicked(object sender, EventArgs e)
         {
-            if(window.IsActive) return window;
+            _isExiting = true; // Set flag before shutting down
+            Shutdown(); // Use Shutdown() to trigger OnExit
         }
-        // If no window is active (e.g. only tray icon), return null or a hidden main window if you have one.
-        // For simple tray app, null is fine, dialog will not be owned.
-        return null;
-    }
 
-
-    void OnExitClicked(object sender, EventArgs e)
-    {
-        _isExiting = true;
-        System.Windows.Application.Current.Shutdown();
-    }
-
-    protected override void OnExit(ExitEventArgs e)
-    {
-        if(!_isExiting) // Prevent cleanup if already exiting due to mutex
+        protected override void OnExit(ExitEventArgs e)
         {
-            _taskbarMonitor?.StopMonitoring();
-            _taskbarMonitor?.Dispose();
-            _notifyIcon?.Dispose();
-        }
+            if(!_isExiting && _mutex == null) // Check if already exiting due to mutex (mutex will be null if startup failed early)
+            {
+                // This path might not be hit if _isExiting is always true before shutdown
+                // but good for defensive programming.
+                _taskbarMonitor?.StopMonitoring();
+                _taskbarMonitor?.Dispose();
+            }
 
-        if(_notifyIcon != null)
-        {
-            _notifyIcon.Visible = false;
-            _notifyIcon.Dispose();
-            _notifyIcon = null;
-        }
+            // Always try to dispose resources if they were created
+            _taskbarMonitor?.Dispose(); // StopMonitoring is called inside Dispose
 
-        base.OnExit(e);
-        Debug.WriteLine($"{StaticVals.AppName} exited.");
+            if(_notifyIcon != null)
+            {
+                _notifyIcon.Visible = false;
+                _notifyIcon.Dispose();
+                _notifyIcon = null;
+            }
+
+            _mutex?.ReleaseMutex();
+            _mutex?.Dispose();
+            _mutex = null;
+
+            base.OnExit(e);
+            Debug.WriteLine($"{StaticVals.AppName} exited.");
+        }
     }
 }
